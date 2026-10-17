@@ -9,12 +9,19 @@ authors = [
 requires-python = ">=3.12"
 # Runtime deps are added phase by phase, so each one has a reason to be here.
 dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.4",
+    "pandas>=3.0.6",
+    "pyarrow>=26.0.0",
     "pyyaml>=6.0",
 ]
 
 [dependency-groups]
 dev = [
+    "ipykernel>=7.4.0",
+    "jupyterlab>=4.6.4",
     "kaggle>=1.7",
+    "nbconvert>=7.17.2",
     "nbstripout>=0.8",
     "pytest>=8.3",
     "ruff>=0.12",
