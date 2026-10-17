@@ -7,7 +7,7 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 0 (setup). Results, plots and a live demo will appear here as the
+> Status: Phase 1 (data and EDA). Results, plots and a live demo will appear here as the
 > project progresses. Every number in this README will be generated from logged
 > experiment runs, not typed by hand.
 
@@ -59,3 +59,32 @@ uv run python scripts/download_data.py   # ~150 MB download; verifies SHA-256 ch
 
 The loader (`src/fraudgraph/data/load.py`) validates every load against the published
 counts and checks that no edge crosses time steps, which the temporal split relies on.
+
+## EDA findings
+
+From [`notebooks/01_eda.ipynb`](notebooks/01_eda.ipynb). All findings use the training
+period (steps 1–34) except the timeline, which is shown for context only.
+
+![Labels per time step](docs/figures/labels_per_step.png)
+
+- **The illicit share varies a lot between steps,** from under 1% to 36% of labelled
+  transactions within the training period. Illicit counts per step range from 5 to 342
+  (median 84). Late in the timeline, illicit labels almost vanish (from 239 in step 42
+  to between 2 and 24 in steps 43–47), consistent with the dark market shutdown reported
+  by Weber et al. Phase 5 investigates this.
+- **Precision@K uses K = 20.** With K = 100, 59% of training steps have fewer than 100
+  illicit transactions, so even a perfect model could not reach precision 1 there
+  ([D-004](docs/decisions.md)).
+- **The features are already standardised** (column means ≈ 0, standard deviations ≈ 1)
+  but heavily skewed: 85 of 165 have |skew| > 5. There are no constant columns, but 45
+  feature pairs are near-duplicates (|r| > 0.99). This matters for logistic regression
+  (unstable coefficients), not for tree models.
+- **The graph is sparse and each time step is one connected component** (verified for
+  all 34 training steps). Each step has about 4,000 transactions and 4,600 edges;
+  the median transaction has 2 connections, the busiest 473.
+- **There is strong homophily.** Between labelled transactions, illicit–illicit edges
+  occur 2.7× more often than random pairing predicts. An illicit transaction's labelled
+  neighbours are on average 55% illicit, a licit one's only 2%. So the graph carries
+  signal, but 21% of labelled transactions have no labelled neighbour, and labels can't
+  be used at prediction time anyway (D-001). Graph models have to work from features
+  and predicted risk.

@@ -120,3 +120,14 @@ cautious reading, not legal advice.
 every test transaction as "time ≥ 29", and any pattern it learned from time in
 training (for example "illicit was common in step 20") cannot transfer to the future.
 **Decision.** time_step is used only to split and to group results, never as an input.
+
+## D-004 update: K = 20 (Phase 1 EDA)
+**Evidence (training period, steps 1–34; notebooks/01_eda.ipynb, section 2).** Illicit
+transactions per step: median 84, min 5, max 342. Share of steps with fewer than K
+illicit, where precision@K is capped below 1 even for a perfect model: K=10: 6%,
+K=20: 21%, K=50: 35%, K=100: 59%.
+**Decision.** Primary metric precision@20 per step: an investigator reviewing 20
+alerts per two-week step. K=100 (the brief's example) would be capped in most steps,
+so it would mostly measure how few illicit transactions there are. Alongside it we
+report recall@20, the per-step illicit count (so the cap is visible), and precision
+at K ∈ {10, 50, 100} as a robustness check. K was fixed before any model was evaluated.
