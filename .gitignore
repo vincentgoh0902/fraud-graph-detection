@@ -1,0 +1,42 @@
+# Secrets
+.env
+kaggle.json
+access_token
+
+# Data and model artefacts (never committed; see README for download steps).
+# Leading "/" anchors to the repo root, so src/fraudgraph/data/ (code) is not ignored.
+/data/
+/artifacts/
+/mlruns/
+/mlartifacts/
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.joblib
+*.ubj
+
+# Neo4j local volumes
+/neo4j/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Node (in case a frontend tool sneaks in)
+node_modules/

@@ -1,0 +1,36 @@
+[project]
+name = "fraudgraph"
+version = "0.1.0"
+description = "Graph-based illicit-transaction detection on the Elliptic Bitcoin dataset"
+readme = "README.md"
+authors = [
+    { name = "vincentgoh0902", email = "e1121484@u.nus.edu" }
+]
+requires-python = ">=3.12"
+# Runtime deps are added phase by phase, so each one has a reason to be here.
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[dependency-groups]
+dev = [
+    "kaggle>=1.7",
+    "nbstripout>=0.8",
+    "pytest>=8.3",
+    "ruff>=0.12",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: pyflakes + pycodestyle, I: import sorting, B: likely bugs, UP: modern syntax
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

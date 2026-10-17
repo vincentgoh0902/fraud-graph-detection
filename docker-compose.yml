@@ -1,0 +1,26 @@
+# Phase 0: Neo4j only. The api and dashboard services are added in Phase 6.
+services:
+  neo4j:
+    # 5.26 is the Neo4j 5 LTS line; the image is multi-arch (arm64 included).
+    image: neo4j:5.26-community
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      # Downloads the free Graph Data Science plugin on first start.
+      NEO4J_PLUGINS: '["graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: gds.*
+      # ~200k nodes / ~234k edges is small; this leaves room for GDS projections.
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1g
+      NEO4J_server_memory_pagecache_size: 512m
+    ports:
+      # Bound to localhost only: nothing on the network can reach the database.
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - ./neo4j/data:/data
+      - ./neo4j/plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
