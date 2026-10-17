@@ -1,0 +1,7 @@
+# Temporal split (inclusive time-step ranges). See docs/decisions.md D-009.
+# Test 35-49 follows Weber et al. (2019). Validation is the last five training steps,
+# and the final model is trained on 1-29 only (no refit), so the threshold tuned on
+# validation is valid for exactly the model that gets evaluated.
+train_steps: [1, 29]
+val_steps: [30, 34]
+test_steps: [35, 49]

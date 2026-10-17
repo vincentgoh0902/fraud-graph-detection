@@ -78,3 +78,45 @@ most. A public Neo4j-backed app on a personal server adds attack surface and upt
 work for little extra visibility. To support both modes, graph access goes through
 one interface with two implementations: Neo4j (full stack) and in-memory from
 exported files (demo).
+
+## D-009: Validation on steps 30–34, no refit
+**Decision.** Train on steps 1–29, select models and tune thresholds on 30–34, and
+evaluate *that same model* on test steps 35–49. No retraining on 1–34 afterwards.
+**Why.** A threshold tuned on validation is only valid for the model it was tuned
+on. Refitting on 1–34 would produce a different model with different score
+distributions, so the tuned threshold might no longer fit. This also keeps to the
+rule "report the checkpoint you actually keep".
+**Cost.** The model never sees the five most recent training steps. The value of
+recent data is measured separately by the rolling-retraining experiment (Phase 5).
+
+## D-010: Decisions use training steps only
+Every data-driven choice (K for precision@K, scaling, feature selection) uses
+training steps only. EDA may show the full 49-step timeline for context, marked as
+such, but nothing in it drives a decision. Otherwise, information about the test
+period would leak into the design.
+
+## D-011: Label encoding and data validation
+**Decision.** Raw labels "1" (illicit), "2" (licit), "unknown" are mapped once in
+the loader to 1, 0, −1, so illicit is the positive class everywhere. Every load
+validates: unique tx_ids, no missing features, every edge endpoint exists, no edge
+crosses time steps, and counts equal the published figures (203,769 nodes, 234,355
+edges, 4,545 illicit, 42,019 licit).
+**Why.** Treating "2" as positive would invert every metric without any error.
+The same-step edge check is the factual basis of D-001, so it is enforced in
+code, not taken from the paper.
+
+## D-012: Licence (CC BY-NC-ND 4.0) and what the public demo may contain
+**Context.** The dataset is licensed Attribution-NonCommercial-NoDerivatives.
+**Decision.** Raw data is never committed or redistributed; the README links to the
+Kaggle source and cites Elliptic and Weber et al. (2019). The Hugging Face demo ships
+only model outputs (transaction IDs, risk scores, SHAP feature names and values) and
+small subgraphs (IDs and edges), never the feature table itself.
+**Why.** A personal portfolio project is non-commercial, but re-publishing the
+features (even reformatted) could count as redistributing a derivative. This is a
+cautious reading, not legal advice.
+
+## D-013: time_step is not a model feature
+**Problem.** Test steps 35–49 never appear in training. A tree model would treat
+every test transaction as "time ≥ 29", and any pattern it learned from time in
+training (for example "illicit was common in step 20") cannot transfer to the future.
+**Decision.** time_step is used only to split and to group results, never as an input.
