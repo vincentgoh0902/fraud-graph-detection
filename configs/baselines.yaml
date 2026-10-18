@@ -17,7 +17,7 @@ models:
   logreg:
     deterministic: true   # lbfgs: same result for any seed, so one run (D-006)
     grid:
-      C: [0.01, 0.1, 1.0, 10.0]   # inverse regularisation strength
+      C: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]   # inverse regularisation strength (D-014)
   random_forest:
     grid:
       n_estimators: [300]

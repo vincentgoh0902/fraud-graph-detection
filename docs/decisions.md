@@ -133,7 +133,7 @@ report recall@20, the per-step illicit count (so the cap is visible), and precis
 at K ∈ {10, 50, 100} as a robustness check. K was fixed before any model was evaluated.
 
 ## D-014: Tuning budget and selection rule (Phase 2 onwards)
-**Decision.** Each model gets a small fixed grid (logistic regression 4 settings,
+**Decision.** Each model gets a small fixed grid (logistic regression 6 settings,
 random forest 8, XGBoost 8; `configs/baselines.yaml`). Every setting runs with every
 seed; the setting with the best *mean validation PR-AUC* wins. The winner is then
 refit per seed and only those refits are scored on test. Exact ties keep the setting
@@ -149,6 +149,15 @@ lucky seed on a validation set with few illicit examples (D-005).
 **Refit check.** Refitting the winner (instead of keeping every candidate model in
 memory) is only valid if the refit is the same model, so the protocol asserts that
 each refit reproduces its selection-time validation PR-AUC, and raises otherwise.
+**Amendment (after the first run).** Logistic regression's grid was originally
+C ∈ {0.01, 0.1, 1, 10}; C = 10 won and validation PR-AUC was still rising steeply
+(local: 0.38, 0.42, 0.56, 0.78). An optimum on the grid edge means the grid was too
+narrow, so it was widened to add 100 and 1000 (6 settings). This was decided after
+test numbers had been seen; the trigger and the choice used validation only. A
+check beyond the grid (C = 10⁴, 10⁶) showed validation PR-AUC flat and noisy
+(local 0.80–0.84, all 0.77) with lbfgs converged, so C = 1000 is effectively
+unregularised and widening further would not help. The very large coefficients
+(|coef| up to ~200) reflect the near-duplicate feature pairs found in EDA.
 **Not done.** Random or Bayesian search over large spaces. A larger search would mostly
 fit noise in the 30–34 validation steps.
 

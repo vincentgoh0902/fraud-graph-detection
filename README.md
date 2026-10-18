@@ -114,10 +114,10 @@ too; test steps 35–49 were scored once, with the chosen model
 
 | Model | Features | Seeds | Val PR-AUC | Test PR-AUC | Precision@20 | Recall@20 |
 |---|---|---|---|---|---|---|
-| Logistic regression | (a) local | 1 | 0.781 | 0.207 | 0.057 | 0.056 |
+| Logistic regression | (a) local | 1 | 0.836 | 0.267 | 0.133 | 0.083 |
 | Random forest | (a) local | 3 | 0.989 ± 0.000 | 0.781 ± 0.001 | 0.543 ± 0.000 | 0.176 ± 0.000 |
 | XGBoost | (a) local | 3 | 0.988 ± 0.000 | 0.778 ± 0.003 | 0.550 ± 0.000 | 0.181 ± 0.001 |
-| Logistic regression | (b) local + aggregated | 1 | 0.706 | 0.207 | 0.192 | 0.093 |
+| Logistic regression | (b) local + aggregated | 1 | 0.770 | 0.231 | 0.107 | 0.074 |
 | Random forest | (b) local + aggregated | 3 | 0.990 ± 0.000 | 0.786 ± 0.004 | 0.545 ± 0.002 | 0.177 ± 0.001 |
 | XGBoost | (b) local + aggregated | 3 | 0.990 ± 0.001 | 0.791 ± 0.000 | 0.553 ± 0.003 | 0.182 ± 0.002 |
 
@@ -125,10 +125,10 @@ too; test steps 35–49 were scored once, with the chosen model
 
 | Model | Features | Seeds | Precision | Recall | F1 | Precision (cost) | Recall (cost) | F1 (cost) |
 |---|---|---|---|---|---|---|---|---|
-| Logistic regression | (a) local | 1 | 0.257 | 0.753 | 0.384 | 0.204 | 0.796 | 0.325 |
+| Logistic regression | (a) local | 1 | 0.442 | 0.641 | 0.523 | 0.199 | 0.804 | 0.319 |
 | Random forest | (a) local | 3 | 0.782 ± 0.031 | 0.725 ± 0.007 | 0.752 ± 0.011 | 0.573 ± 0.022 | 0.748 ± 0.002 | 0.649 ± 0.014 |
 | XGBoost | (a) local | 3 | 0.775 ± 0.012 | 0.713 ± 0.003 | 0.742 ± 0.007 | 0.459 ± 0.089 | 0.763 ± 0.018 | 0.569 ± 0.065 |
-| Logistic regression | (b) local + aggregated | 1 | 0.209 | 0.820 | 0.333 | 0.182 | 0.847 | 0.299 |
+| Logistic regression | (b) local + aggregated | 1 | 0.276 | 0.706 | 0.396 | 0.177 | 0.835 | 0.292 |
 | Random forest | (b) local + aggregated | 3 | 0.886 ± 0.032 | 0.710 ± 0.006 | 0.788 ± 0.014 | 0.592 ± 0.048 | 0.740 ± 0.001 | 0.657 ± 0.030 |
 | XGBoost | (b) local + aggregated | 3 | 0.841 ± 0.009 | 0.731 ± 0.001 | 0.782 ± 0.003 | 0.688 ± 0.109 | 0.743 ± 0.007 | 0.711 ± 0.055 |
 
