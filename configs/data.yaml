@@ -1,0 +1,23 @@
+# Elliptic Bitcoin dataset: where it comes from and what it should look like.
+kaggle_dataset: ellipticco/elliptic-data-set
+raw_dir: data/raw
+processed_dir: data/processed
+
+# Paths inside raw_dir after unzipping.
+files:
+  features: elliptic_bitcoin_dataset/elliptic_txs_features.csv
+  classes: elliptic_bitcoin_dataset/elliptic_txs_classes.csv
+  edges: elliptic_bitcoin_dataset/elliptic_txs_edgelist.csv
+
+# SHA-256 checksums live in configs/data_checksums.yaml (written by
+# `scripts/download_data.py --record-checksums` on the first download).
+
+# Published figures from the Kaggle description; the loader checks against these.
+expected:
+  n_nodes: 203769
+  n_edges: 234355
+  n_illicit: 4545
+  n_licit: 42019
+  n_time_steps: 49
+  n_local_features: 93   # excluding time step
+  n_agg_features: 72

@@ -29,9 +29,10 @@ Neo4j 5 Community + GDS plugin, MLflow (local store), FastAPI, Streamlit, pytest
 
 ## Working agreement
 - One phase at a time. Propose the plan for a phase, wait for approval, then build.
-- The user writes: temporal split, metrics, threshold tuning, out-of-fold
-  neighbour-risk feature. Claude writes the failing tests for these first, then
-  reviews. Claude writes infra/boilerplate and explains each file before creating it.
+- Claude writes all code; the user does not write code. The user's goal is to
+  understand and defend every piece, so explain each file: what it does, why, and
+  the non-obvious lines. Write tests first for evaluation-critical code.
+- One branch and pull request per phase; merge to `main` only when CI is green.
 - End each phase with a short "what you should be able to explain" checklist.
 - Every non-obvious choice gets an entry in `docs/decisions.md`.
 
