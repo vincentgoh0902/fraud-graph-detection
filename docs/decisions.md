@@ -131,3 +131,47 @@ alerts per two-week step. K=100 (the brief's example) would be capped in most st
 so it would mostly measure how few illicit transactions there are. Alongside it we
 report recall@20, the per-step illicit count (so the cap is visible), and precision
 at K ∈ {10, 50, 100} as a robustness check. K was fixed before any model was evaluated.
+
+## D-014: Tuning budget and selection rule (Phase 2 onwards)
+**Decision.** Each model gets a small fixed grid (logistic regression 4 settings,
+random forest 8, XGBoost 8; `configs/baselines.yaml`). Every setting runs with every
+seed; the setting with the best *mean validation PR-AUC* wins. The winner is then
+refit per seed and only those refits are scored on test. Exact ties keep the setting
+listed first, so grids list simpler settings first.
+**Budget across phases.** The budget does not grow for later models. Phase 3's
+XGBoost on feature set (c) reuses this exact XGBoost grid, so any difference comes
+from the features alone. Phase 4's GNNs get a grid of comparable size (about 8
+settings). If any model's budget is ever raised, the baselines are re-run with the
+same increase, because a tuned graph model against an untuned baseline would
+measure tuning effort, not graph structure.
+**Why mean over seeds.** Selecting on one seed rewards configurations that got a
+lucky seed on a validation set with few illicit examples (D-005).
+**Refit check.** Refitting the winner (instead of keeping every candidate model in
+memory) is only valid if the refit is the same model, so the protocol asserts that
+each refit reproduces its selection-time validation PR-AUC, and raises otherwise.
+**Not done.** Random or Bayesian search over large spaces. A larger search would mostly
+fit noise in the 30–34 validation steps.
+
+## D-015: Precision@K counts labelled nodes only; ties scored by expectation
+**Labelled only.** Top-K is taken among *labelled* test transactions in each step,
+because unknown ones cannot be scored right or wrong. A real investigator's queue
+would also contain unknowns, so absolute precision@K is optimistic relative to
+deployment; comparisons between models are still fair, since every model is
+measured the same way.
+**Ties.** When several transactions share the score at the K-th place (common with
+random forest probabilities), hits are counted as their expected value under random
+tie-breaking. A plain sort would let row order decide who is reviewed.
+**Averaging.** Per-step values are averaged over test steps (macro), so each
+two-week batch of review work counts equally; steps with no illicit transactions
+are skipped for recall (undefined) but kept for precision.
+
+## D-016: PR-AUC is computed as average precision
+Average precision (scikit-learn's `average_precision_score`) sums precision at each
+recall step. The trapezoidal rule interpolates linearly between precision-recall
+points, which is not achievable by any threshold and overstates the area. Average
+precision is also what most papers mean by PR-AUC in fraud detection.
+
+## D-017: pyarrow pinned below 26 for MLflow
+MLflow 3.x requires `pyarrow<26`. The Phase 1 lower bound (`>=26`) was only what
+`uv add` wrote, not a real requirement; pyarrow is used for Parquet and fast CSV
+reading, which 25 handles. Loosened to `pyarrow>=24`.
