@@ -1,0 +1,4 @@
+# Local MLflow store (git-ignored). MLFLOW_TRACKING_URI, if set, overrides the database.
+# Browse runs with: uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
+db: mlruns/mlflow.db
+artifact_root: mlruns/artifacts
