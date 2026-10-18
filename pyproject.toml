@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 # Runtime deps are added phase by phase, so each one has a reason to be here.
 dependencies = [
     "matplotlib>=3.11.2",
+    "networkx>=3.7",
     "numpy>=2.5.4",
     "pandas>=3.0.6",
     "pyarrow>=26.0.0",

@@ -79,12 +79,20 @@ period (steps 1–34) except the timeline, which is shown for context only.
   but heavily skewed: 85 of 165 have |skew| > 5. There are no constant columns, but 45
   feature pairs are near-duplicates (|r| > 0.99). This matters for logistic regression
   (unstable coefficients), not for tree models.
+
+  ![Feature skew](docs/figures/feature_skew.png)
+  ![Feature correlation](docs/figures/feature_correlation.png)
 - **The graph is sparse and each time step is one connected component** (verified for
   all 34 training steps). Each step has about 4,000 transactions and 4,600 edges;
-  the median transaction has 2 connections, the busiest 473.
+  78% of transactions have only 1 or 2 connections, and the busiest has 473.
+
+  ![Degree distribution](docs/figures/degree_distribution.png)
 - **There is strong homophily.** Between labelled transactions, illicit–illicit edges
   occur 2.7× more often than random pairing predicts. An illicit transaction's labelled
   neighbours are on average 55% illicit, a licit one's only 2%. So the graph carries
   signal, but 21% of labelled transactions have no labelled neighbour, and labels can't
   be used at prediction time anyway (D-001). Graph models have to work from features
   and predicted risk.
+
+  ![Homophily](docs/figures/homophily.png)
+  ![Example neighbourhoods](docs/figures/example_neighbourhoods.png)
