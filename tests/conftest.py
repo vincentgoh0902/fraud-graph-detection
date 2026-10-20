@@ -1,6 +1,8 @@
 """A tiny synthetic Elliptic dataset in the exact raw format, so tests never need
 the real 700 MB download (and CI can run them)."""
 
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -44,3 +46,11 @@ def data(raw_files):
 def split_cfg():
     # Same shape as configs/split.yaml, scaled down to six steps.
     return SplitConfig(train_steps=(1, 3), val_steps=(4, 4), test_steps=(5, 6))
+
+
+# torch and XGBoost each bring their own OpenMP runtime, and on macOS a process that uses
+# both crashes (D-030). So tests that import torch live in tests/torch/ and are skipped in
+# the main pytest process; tests/test_torch_suite.py runs them in a separate process.
+TORCH_TESTS_ENV = "FRAUDGRAPH_TORCH_TESTS"
+if not os.environ.get(TORCH_TESTS_ENV):
+    collect_ignore_glob = ["torch/*"]

@@ -109,11 +109,14 @@ def run_protocol(
     cfg: EvalConfig,
     tags: dict[str, str],
     ids: np.ndarray | None = None,
+    on_final: Callable[[Scorer, int], None] | None = None,
 ) -> ProtocolResult:
     """Select on validation, evaluate the selection on test, log everything to MLflow.
 
     y and steps cover all nodes; the split masks pick out each period's labelled ones.
     ids (transaction ids, optional) are saved with the test scores.
+    on_final(scorer, seed), optional, runs inside each final run after it is scored, so it
+    can save extra outputs of the kept model (GNN embeddings for the hybrid, Phase 4).
     """
     y_val = y[split.val]
     prefix = "/".join(tags[k] for k in ("model", "feature_set") if k in tags)
@@ -169,6 +172,8 @@ def run_protocol(
                 path = f"{tmp}/test_scores.parquet"
                 scores.to_parquet(path, index=False)
                 mlflow.log_artifact(path)
+            if on_final is not None:
+                on_final(scorer, seed)
         finals.append(metrics)
 
     return ProtocolResult(params=best_params, final_metrics=finals)

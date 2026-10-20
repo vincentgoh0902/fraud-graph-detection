@@ -8,6 +8,8 @@ MODEL_NAMES = {
     "logreg": "Logistic regression",
     "random_forest": "Random forest",
     "xgboost": "XGBoost",
+    "gcn": "GCN",
+    "sage": "GraphSAGE",
 }
 FEATURE_NAMES = {
     "local": "(a) local",
@@ -15,6 +17,8 @@ FEATURE_NAMES = {
     "local+graph": "(c) local + graph",
     "all+graph": "(b) + graph",
     "local+structure": "local + structure only",
+    "local+emb": "(a) + GNN embeddings (hybrid)",
+    "all+emb": "(b) + GNN embeddings (hybrid)",
 }
 # The comparisons that answer the research question (D-003, D-021), as (from, to).
 COMPARISONS = [
@@ -44,10 +48,33 @@ def mean_std(values: pd.Series) -> str:
     return f"{v.mean():.3f} ± {v.std(ddof=1):.3f}"
 
 
-def _table(finals: pd.DataFrame, columns: dict[str, str]) -> str:
+LOSS_NAMES = {"weighted_ce": "weighted CE", "focal": "focal"}
+
+# Row order of the all-model table (Phase 4): tabular models, then graph features, then
+# GNNs, then the hybrids, each on (a) before (b).
+ALL_MODELS_ORDER = [
+    *[(m, fs) for fs in ("local", "all") for m in ("logreg", "random_forest", "xgboost")],
+    ("xgboost", "local+graph"),
+    ("xgboost", "local+structure"),
+    ("xgboost", "all+graph"),
+    *[(m, fs) for m in ("gcn", "sage") for fs in ("local", "all")],
+    ("xgboost", "local+emb"),
+    ("xgboost", "all+emb"),
+]
+
+
+def model_label(model: str, feature_set: str) -> str:
+    return f"{MODEL_NAMES[model]}, {FEATURE_NAMES[feature_set]}"
+
+
+def _table(
+    finals: pd.DataFrame,
+    columns: dict[str, str],
+    order: list[tuple[str, str]] | None = None,
+) -> str:
     header = ["Model", "Features", "Seeds", *columns.values()]
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    order = [(m, f) for f in FEATURE_NAMES for m in MODEL_NAMES]
+    order = order or [(m, f) for f in FEATURE_NAMES for m in MODEL_NAMES]
     for model, fs in order:
         g = finals[(finals["tags.model"] == model) & (finals["tags.feature_set"] == fs)]
         if g.empty:
@@ -127,6 +154,78 @@ def _signed(v: float) -> str:
 
 def interval_table(intervals: dict[tuple[str, str], dict[str, float]], k: int) -> str:
     """The paired step bootstrap (D-024) for each comparison, in COMPARISONS order."""
+    rows = [
+        (FEATURE_NAMES[src], FEATURE_NAMES[dst], intervals[(src, dst)])
+        for src, dst in COMPARISONS
+        if (src, dst) in intervals
+    ]
+    return pair_interval_table(rows, k)
+
+
+def all_models_table(finals: pd.DataFrame, k: int) -> str:
+    """Every model and feature set in one table (the Phase 4 acceptance criterion)."""
+    columns = {
+        "val_pr_auc": "Val PR-AUC",
+        "test_pr_auc": "Test PR-AUC",
+        f"test_precision_at_{k}": f"Precision@{k}",
+        f"test_recall_at_{k}": f"Recall@{k}",
+        "test_f1": "F1",
+        "test_cost_f1": "F1 (cost)",
+    }
+    return _table(finals, columns, ALL_MODELS_ORDER)
+
+
+def loss_table(runs: pd.DataFrame) -> str:
+    """Weighted cross-entropy vs focal loss for each GNN, on validation only (D-029).
+
+    For each loss, the best grid setting's mean validation PR-AUC over seeds. Only the
+    overall winner was scored on test, so this comparison never uses test data.
+    """
+    header = ["Model", "Features", "Weighted CE: best val PR-AUC", "Focal: best val PR-AUC",
+              "Selected"]  # fmt: skip
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    f = latest_finals(runs)
+    c = runs[runs["tags.role"] == "candidate"]
+    latest = c.groupby(["tags.model", "tags.feature_set"])["tags.run_group"].transform("max")
+    c = c[c["tags.run_group"] == latest]
+    for model, fs in ALL_MODELS_ORDER:
+        g = c[(c["tags.model"] == model) & (c["tags.feature_set"] == fs)]
+        if g.empty or "params.loss" not in g:
+            continue
+        per_config = g.groupby(["tags.config_id", "params.loss"])["metrics.val_pr_auc"].mean()
+        best = per_config.groupby("params.loss").max()
+        cells = [MODEL_NAMES[model], FEATURE_NAMES[fs]]
+        cells += [f"{best.get(loss, float('nan')):.3f}" for loss in ("weighted_ce", "focal")]
+        # The loss the protocol actually selected, read from its final runs.
+        chosen = f[(f["tags.model"] == model) & (f["tags.feature_set"] == fs)]["params.loss"]
+        cells.append(", ".join(sorted(LOSS_NAMES[x] for x in set(chosen))) or "-")
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def checkpoint_table(finals: pd.DataFrame) -> str:
+    """The kept GNN checkpoints: epoch, and PR-AUC on training vs validation nodes.
+
+    A training PR-AUC far above validation means the embeddings the hybrid trains on are
+    much cleaner than the ones it is scored on (D-028).
+    """
+    header = ["Model", "Features", "Seeds", "Kept epoch", "Train PR-AUC", "Val PR-AUC"]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    for model, fs in ALL_MODELS_ORDER:
+        if model not in ("gcn", "sage"):
+            continue
+        g = finals[(finals["tags.model"] == model) & (finals["tags.feature_set"] == fs)]
+        if g.empty:
+            continue
+        epochs = ", ".join(str(int(e)) for e in g.sort_values("tags.seed")["metrics.best_epoch"])
+        cells = [MODEL_NAMES[model], FEATURE_NAMES[fs], str(len(g)), epochs]
+        cells += [mean_std(g[f"metrics.{c}"]) for c in ("train_pr_auc", "val_pr_auc")]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def pair_interval_table(rows: list[tuple[str, str, dict[str, float]]], k: int) -> str:
+    """Paired step bootstrap (D-024) rows, given as (from label, to label, result)."""
     header = [
         "From",
         "To",
@@ -135,17 +234,27 @@ def interval_table(intervals: dict[tuple[str, str], dict[str, float]], k: int) -
         "share of resamples where To has higher PR-AUC",
     ]
     lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
-    for src, dst in COMPARISONS:
-        r = intervals.get((src, dst))
-        if r is None:
-            continue
+    for src, dst, r in rows:
         cells = [
-            FEATURE_NAMES[src],
-            FEATURE_NAMES[dst],
+            src,
+            dst,
             f"{_signed(r['pr_auc_change'])} [{_signed(r['pr_auc_lo'])}, {_signed(r['pr_auc_hi'])}]",
             f"{_signed(r['precision_at_k_change'])} "
             f"[{_signed(r['precision_at_k_lo'])}, {_signed(r['precision_at_k_hi'])}]",
             f"{r['share_positive']:.0%}",
         ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def per_step_table(series: dict[str, list[pd.DataFrame]]) -> str:
+    """The per-step figure's numbers: illicit F1 per test step, mean over seeds."""
+    first = next(iter(series.values()))[0]
+    header = ["Step", "Illicit", *series]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    means = {k: pd.concat([t["f1"] for t in v], axis=1).mean(axis=1) for k, v in series.items()}
+    for step in first.index:
+        cells = [str(step), str(int(first.loc[step, "n_illicit"]))]
+        cells += [f"{means[k].loc[step]:.3f}" for k in series]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)

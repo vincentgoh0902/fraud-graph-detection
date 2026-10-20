@@ -32,6 +32,25 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.12",
 ]
+# Training-only deps (Phase 4 GNNs). Serving images install neither group, so they stay
+# torch-free (embeddings and scores are precomputed offline).
+train = [
+    "torch>=2.14.1",
+    "torch-geometric>=2.8.1",
+]
+
+[tool.uv]
+default-groups = ["dev", "train"]
+
+# On Linux (CI), PyPI's torch wheel bundles CUDA (several GB). The CPU-only index has the
+# same version without it. macOS wheels from PyPI are already CPU/MPS only.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

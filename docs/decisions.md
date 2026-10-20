@@ -300,3 +300,114 @@ re-run reproduced the logged Phase 2 metrics, as expected from deterministic tra
 clusters tend to be somewhat too narrow; the late steps with very few illicit
 transactions (after the dark-market shutdown; Phase 5) add most of the variation. Read the interval as
 approximate, and an interval that only just excludes zero as weak evidence.
+
+## D-025: GNNs train on CPU with deterministic algorithms
+**Problem.** The protocol refits the winning setting and requires the refit to reproduce its
+selection-time validation PR-AUC exactly (D-014). GNN message passing sums over neighbours
+with scatter operations, and PyTorch does not guarantee these are deterministic on GPUs
+(parallel additions can happen in a different order each run, which changes rounding). It
+does provide deterministic CPU versions. MPS was not tested for this; it was ruled out
+because determinism is not guaranteed there.
+**Decision.** Train on CPU with `torch.use_deterministic_algorithms(True)` and a fixed seed
+per run (weights and dropout masks). Measured on the real graph: about 0.3–0.4 s per epoch,
+and two runs with the same seed give bit-identical scores.
+**Cost.** CPU is slower than the GPU would be. The whole grid still runs in a few hours,
+and an exact refit check is worth more than speed.
+
+## D-026: Undirected edges, per-period subgraphs, training-period scaling
+**Undirected.** Elliptic edges are payment flows (src pays dst). Both directions carry risk:
+paying an illicit transaction and being paid by one are both suspicious, as in Phase 3's
+neighbour risk. Edges are added in both directions, so a node's neighbours are its payers
+and its payees. A directed model (separate weights per direction) would double parameters
+for an untested gain; it is not tried.
+**Per-period subgraphs.** No edge crosses periods (asserted, D-011), so the model trains on the
+training-period subgraph and scores each period on its own subgraph. This equals running
+the whole graph (a test checks they agree) at about half the cost, and makes "no
+information passes between periods" true by construction.
+**Scaling.** Neural networks need features on similar scales; tree models do not. Each
+feature is standardised with the mean and standard deviation of all training-period nodes
+(steps 1–29, labelled or not; no label is used). Validation and test nodes are scaled with
+those same numbers (D-010).
+
+## D-027: GNN grid, early stopping and the kept checkpoint
+**Grid (8 settings per model, the D-014 budget).** Hidden size {64, 128} × learning rate
+{0.01, 0.003} × loss {weighted cross-entropy, focal}. Fixed: two message-passing layers,
+dropout 0.5, weight decay 5e-4, Adam, at most 500 epochs.
+**Checkpoint.** After every epoch the model scores the validation nodes. The kept model is
+the epoch with the best validation PR-AUC (the earliest on a tie), not the last epoch, as the
+brief requires; training stops after 50 epochs without improvement.
+**Honesty note.** Choosing the epoch on validation is extra tuning that XGBoost does not get
+(it has a fixed number of trees). It makes the GNN's *validation* score slightly
+optimistic, but test is still untouched: test scores come only from the kept checkpoint of
+the winning setting. Each run logs its kept epoch and how many epochs it ran.
+
+## D-028: Hybrid uses the kept GNN's embeddings, in-sample on training nodes
+**Decision.** The hybrid adds the GNN's second-layer output (one vector per node, 64 or 128
+numbers) to XGBoost's features. The embeddings come from the kept checkpoint of the GNN that
+wins on validation for that feature set, seed s feeding XGBoost seed s.
+**The catch.** That GNN was trained on the training nodes' labels, so their embeddings are
+in-sample: cleaner than those of validation and test nodes, which it never trained on.
+XGBoost then learns from embeddings that look better than the ones it will be scored on.
+This can only *lower* validation and test scores, never inflate them, so it is a possible
+weakness, not leakage.
+**Why not out-of-fold (as in D-001).** Out-of-fold needs one model per fold. Each fold's GNN
+learns its own coordinate system, so embedding column 7 would mean something different
+in each fold, and XGBoost could not learn from it. (Phase 3 could do out-of-fold because a
+predicted probability means the same thing whichever model produced it.)
+**Check.** Each GNN run logs its PR-AUC on training nodes next to validation; the README
+shows both. A large gap means the hybrid's training embeddings are much cleaner than its
+test embeddings.
+**Not done.** Self-supervised embeddings (no labels, so nothing is in-sample) would avoid
+the issue, but they are a different method from the brief's "GNN embeddings".
+
+## D-029: Imbalance handling for GNNs, compared on validation only
+**Losses.** Weighted cross-entropy weights each class by n / (2 · n_class), the same
+"balanced" weights as logistic regression and random forest. Focal loss multiplies each
+node's weighted loss by (1 − p_t)^γ with γ = 2 (p_t = predicted probability of the true
+class), so confidently correct nodes count little and training focuses on hard ones. With
+γ = 0 the two are identical (tested).
+**Comparison.** The loss is part of the grid, so the comparison is the best validation
+PR-AUC reached with each loss. Only the winner is scored on test. Scoring the losing loss
+on test as well would add test numbers for a setting that validation already rejected.
+**Brief.** The brief lists class weights vs focal loss (GNN) vs scale_pos_weight (XGBoost).
+XGBoost's scale_pos_weight is used throughout (Phase 2) and is the tree-model equivalent of
+class weights; it is not compared against focal loss.
+
+## D-030: torch and XGBoost never run in the same process
+**Finding.** On this Mac, a process that runs torch and then XGBoost segfaults (or hangs),
+and the reverse order crashes too, even with torch limited to one thread. torch, XGBoost
+and scikit-learn each ship their own OpenMP library (three copies of `libomp.dylib` were
+loaded); Phases 2–3 ran with two of them, and the third breaks it.
+**Decision.** Keep them in separate processes. GNN training imports torch and never XGBoost;
+the hybrid reads the embeddings the GNN runs saved to disk and never imports torch. They
+were separate steps anyway. In tests, everything that imports torch lives in `tests/torch/`.
+The main pytest process skips that folder, and one test (`tests/test_torch_suite.py`)
+runs it in a child process, so `uv run pytest` still runs everything.
+**Not done.** Forcing one shared OpenMP library through dynamic-linker settings: fragile and
+machine-specific.
+
+## D-031: Phase 4 comparisons fixed before the results
+**Decision.** Before any Phase 4 test result existed, the README comparisons were fixed as:
+XGBoost → best GNN on (a) and on (b); XGBoost → hybrid on (a) and on (b); GCN → GraphSAGE on
+(a) and on (b). "Best GNN" means the higher mean *validation* PR-AUC. Each comparison gets the
+paired step bootstrap of D-024. The per-step F1 figure shows the models built on (b), the
+strongest base: XGBoost, XGBoost + graph features, GCN, GraphSAGE and the hybrid.
+**Why.** Choosing which comparisons to show after seeing test results would let the
+choice favour a story.
+
+## D-032: Finding — GNNs and the hybrid do not beat XGBoost
+**Evidence (Phase 4 runs, README Phase 4 tables).** Best GNN (GraphSAGE) test PR-AUC 0.577 on
+(a) and 0.526 on (b), against XGBoost's 0.778 and 0.791; paired bootstrap intervals for both
+changes are below zero. The hybrid (XGBoost + GraphSAGE embeddings) scores 0.673 / 0.649,
+also below XGBoost alone, and below it on validation too (0.975 / 0.966 vs 0.988 / 0.990).
+**Likely cause of the hybrid result.** The in-sample embeddings of D-028: GraphSAGE reaches
+PR-AUC 0.989 / 0.998 on its own training nodes and 0.956 / 0.957 on validation. This is
+consistent with the numbers but untested. A test would be embeddings that use no labels
+(self-supervised), so training and test embeddings are produced the same way.
+**Decision.** Report the result as it is. No model is re-tuned after seeing test.
+**Limitation: epoch cap.** In the GCN grid on (a), setting 6 (hidden 128, learning rate 0.003,
+weighted CE) hit the 500-epoch cap in one of three seeds with its best epoch at 499. Its
+mean validation PR-AUC (0.904) was just below the winner's (0.909), so more epochs might
+have changed which GCN setting wins. Raising the cap is a budget increase for one model,
+which D-014 does not allow without re-running the baselines likewise, and it would not
+close a 0.3 test PR-AUC gap. One other run hit the cap (GCN (a), setting 2), also not a winner.

@@ -1,0 +1,32 @@
+# Phase 4: GCN and GraphSAGE. Seeds and evaluation settings come from baselines.yaml.
+# The grid has 8 settings per model, the same budget as XGBoost (D-014, D-027).
+base: baselines
+experiment: gnn
+phase: "4"
+runner: gnn
+feature_sets: [local, all]
+
+# Fixed for every setting. The kept checkpoint is the epoch with the best validation
+# PR-AUC; training stops after `patience` epochs without improvement (D-027).
+training:
+  max_epochs: 500
+  patience: 50
+  dropout: 0.5
+  weight_decay: 5.0e-4   # L2 penalty in Adam, the usual GCN setting (Kipf & Welling, 2017)
+  focal_gamma: 2.0       # only used when loss = focal (D-029)
+
+# Embeddings of each final run, for the hybrid. Git-ignored with the rest of data/.
+embeddings_dir: data/processed/embeddings
+
+# Simpler settings first: exact ties keep the earlier one (D-014).
+models:
+  gcn:
+    grid:
+      hidden: [64, 128]
+      lr: [0.01, 0.003]
+      loss: [weighted_ce, focal]
+  sage:
+    grid:
+      hidden: [64, 128]
+      lr: [0.01, 0.003]
+      loss: [weighted_ce, focal]
