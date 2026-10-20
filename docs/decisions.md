@@ -394,3 +394,20 @@ paired step bootstrap of D-024. The per-step F1 figure shows the models built on
 strongest base: XGBoost, XGBoost + graph features, GCN, GraphSAGE and the hybrid.
 **Why.** Choosing which comparisons to show after seeing test results would let the
 choice favour a story.
+
+## D-032: Finding — GNNs and the hybrid do not beat XGBoost
+**Evidence (Phase 4 runs, README Phase 4 tables).** Best GNN (GraphSAGE) test PR-AUC 0.577 on
+(a) and 0.526 on (b), against XGBoost's 0.778 and 0.791; paired bootstrap intervals for both
+changes are below zero. The hybrid (XGBoost + GraphSAGE embeddings) scores 0.673 / 0.649,
+also below XGBoost alone, and below it on validation too (0.975 / 0.966 vs 0.988 / 0.990).
+**Likely cause of the hybrid result.** The in-sample embeddings of D-028: GraphSAGE reaches
+PR-AUC 0.989 / 0.998 on its own training nodes and 0.956 / 0.957 on validation. This is
+consistent with the numbers but untested. A test would be embeddings that use no labels
+(self-supervised), so training and test embeddings are produced the same way.
+**Decision.** Report the result as it is. No model is re-tuned after seeing test.
+**Limitation: epoch cap.** In the GCN grid on (a), setting 6 (hidden 128, learning rate 0.003,
+weighted CE) hit the 500-epoch cap in one of three seeds with its best epoch at 499. Its
+mean validation PR-AUC (0.904) was just below the winner's (0.909), so more epochs might
+have changed which GCN setting wins. Raising the cap is a budget increase for one model,
+which D-014 does not allow without re-running the baselines likewise, and it would not
+close a 0.3 test PR-AUC gap. One other run hit the cap (GCN (a), setting 2), also not a winner.
