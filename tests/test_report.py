@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from fraudgraph.evaluation.report import (
+    comparison_table,
     latest_finals,
     mean_std,
     replace_between_markers,
@@ -54,3 +55,20 @@ def test_replace_between_markers():
     )
     with pytest.raises(ValueError):
         replace_between_markers("no markers", "new", "r")
+
+
+def test_comparison_table_uses_seed_means():
+    rows = []
+    for fs, vals in [("all", [0.5, 0.7]), ("all+graph", [0.8, 0.8]), ("local", [0.4, 0.4])]:
+        for seed, v in enumerate(vals):
+            rows.append(("xgboost", fs, "g", "final", str(seed), v))
+    df = pd.DataFrame(
+        rows,
+        columns=["tags.model", "tags.feature_set", "tags.run_group", "tags.role", "tags.seed", "v"],
+    )
+    for m in ["test_pr_auc", "test_precision_at_20", "test_f1"]:
+        df[f"metrics.{m}"] = df["v"]
+    out = comparison_table(df, "xgboost", k=20)
+    assert "| (b) local + aggregated | (b) + graph | 0.600 → 0.800 (+0.200) |" in out
+    assert "| (a) local | (b) local + aggregated | 0.400 → 0.600 (+0.200) |" in out
+    assert "(c) local + graph" not in out  # no runs for it: row skipped
