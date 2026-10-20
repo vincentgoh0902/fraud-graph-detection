@@ -7,7 +7,7 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 2 (tabular baselines). Results, plots and a live demo will appear here as the
+> Status: Phase 3 (Neo4j graph features). Results, plots and a live demo will appear here as the
 > project progresses. Every number in this README will be generated from logged
 > experiment runs, not typed by hand.
 
@@ -138,3 +138,81 @@ Mean ± sample standard deviation over seeds.
 Reproduce with `uv run python scripts/run_experiment.py`, then
 `uv run python scripts/make_results_table.py`. Browse runs with
 `uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db`.
+
+### Phase 3: Neo4j graph features
+
+XGBoost (the same 8-setting grid and 3 seeds as Phase 2, [D-014](docs/decisions.md)) on
+three graph feature sets ([D-003](docs/decisions.md), [D-021](docs/decisions.md)):
+
+- **(c) local + graph:** the 93 local features plus in/out degree, PageRank, clustering
+  coefficient, Louvain community size and density (computed by Neo4j Graph Data Science),
+  and community and neighbour risk.
+- **(b) + graph:** all 165 Elliptic features plus the same graph features. Graph features
+  only help if this beats (b), because the 72 aggregated features are already
+  neighbourhood statistics.
+- **Local + structure only:** the graph's shape without any risk feature, to separate
+  structure from risk passed along edges.
+
+Neighbour and community risk use a stage-1 XGBoost model's *predicted* risk, not labels:
+test transactions only connect to other test transactions, whose labels are unknown at
+prediction time. Training transactions are scored out-of-fold by time step, so no
+transaction's risk comes from a model that saw its time step
+([D-001](docs/decisions.md), [D-018](docs/decisions.md)). Louvain communities turned out to
+cover most of a time step (median 5 per step, the largest holding 81% of the step on
+average), so the community features say more about the step than about a local group
+([D-023](docs/decisions.md)).
+
+<!-- results-phase3:start -->
+**Ranking quality** (test steps 35–49; precision/recall@K are per-step means)
+
+| Model | Features | Seeds | Val PR-AUC | Test PR-AUC | Precision@20 | Recall@20 |
+|---|---|---|---|---|---|---|
+| XGBoost | (c) local + graph | 3 | 0.993 ± 0.001 | 0.788 ± 0.001 | 0.552 ± 0.002 | 0.180 ± 0.001 |
+| XGBoost | (b) + graph | 3 | 0.994 ± 0.000 | 0.795 ± 0.001 | 0.562 ± 0.002 | 0.187 ± 0.001 |
+| XGBoost | local + structure only | 3 | 0.990 ± 0.000 | 0.776 ± 0.001 | 0.550 ± 0.003 | 0.179 ± 0.002 |
+
+**Decisions at the validation-tuned threshold** (left: max-F1 threshold; right: cost threshold, a miss costs 10× a false alarm)
+
+| Model | Features | Seeds | Precision | Recall | F1 | Precision (cost) | Recall (cost) | F1 (cost) |
+|---|---|---|---|---|---|---|---|---|
+| XGBoost | (c) local + graph | 3 | 0.808 ± 0.036 | 0.718 ± 0.009 | 0.760 ± 0.011 | 0.607 ± 0.029 | 0.745 ± 0.004 | 0.669 ± 0.016 |
+| XGBoost | (b) + graph | 3 | 0.893 ± 0.021 | 0.715 ± 0.005 | 0.794 ± 0.005 | 0.705 ± 0.079 | 0.737 ± 0.009 | 0.719 ± 0.039 |
+| XGBoost | local + structure only | 3 | 0.769 ± 0.019 | 0.705 ± 0.002 | 0.736 ± 0.007 | 0.547 ± 0.072 | 0.741 ± 0.013 | 0.627 ± 0.045 |
+
+Mean ± sample standard deviation over seeds.
+
+**XGBoost: what each feature set adds** (test steps 35–49; change = difference of seed means)
+
+| From | To | test PR-AUC: from → to (change) | precision@20: from → to (change) | F1 (max-F1 threshold): from → to (change) |
+|---|---|---|---|---|
+| (a) local | (b) local + aggregated | 0.778 → 0.791 (+0.013) | 0.550 → 0.553 (+0.003) | 0.742 → 0.782 (+0.039) |
+| (a) local | (c) local + graph | 0.778 → 0.788 (+0.010) | 0.550 → 0.552 (+0.002) | 0.742 → 0.760 (+0.018) |
+| (a) local | local + structure only | 0.778 → 0.776 (-0.002) | 0.550 → 0.550 (+0.000) | 0.742 → 0.736 (-0.007) |
+| (b) local + aggregated | (b) + graph | 0.791 → 0.795 (+0.004) | 0.553 → 0.562 (+0.009) | 0.782 → 0.794 (+0.012) |
+
+**How sure is each change?** Paired bootstrap over test steps: 1000 resamples of the 15 test steps, both feature sets scored on the same resample ([D-024](docs/decisions.md)).
+
+| From | To | test PR-AUC change [95% interval] | precision@20 change [95% interval] | share of resamples where To has higher PR-AUC |
+|---|---|---|---|---|
+| (a) local | (b) local + aggregated | +0.013 [+0.003, +0.025] | +0.003 [-0.014, +0.024] | 99% |
+| (a) local | (c) local + graph | +0.010 [+0.003, +0.017] | +0.002 [-0.014, +0.019] | 100% |
+| (a) local | local + structure only | -0.002 [-0.007, +0.003] | +0.000 [-0.010, +0.010] | 33% |
+| (b) local + aggregated | (b) + graph | +0.004 [-0.005, +0.013] | +0.009 [+0.000, +0.027] | 85% |
+<!-- results-phase3:end -->
+
+**Reading it.** On top of all Elliptic features, our graph features give no improvement
+that can be told apart from zero: the bootstrap interval for the PR-AUC change includes
+zero, and the precision@20 interval only just reaches it. Graph shape on its own adds
+nothing. Graph information does help in one form, neighbourhood statistics: the dataset's
+aggregated features clearly improve on local features, and our graph features, which
+include risk averaged over neighbours, improve on local features by a similar amount
+when used *instead* of them. So the graph information is real but already captured by
+Elliptic's aggregated features. The intervals are approximate with only 15 test steps
+([D-024](docs/decisions.md)), and whether any effect changes after the late-timeline
+collapse is analysed per step in Phase 5. GNNs (Phase 4) use the graph differently, so
+this result is about engineered graph features, not graph learning in general.
+
+Reproduce with `docker compose up -d neo4j`, `uv run python scripts/load_neo4j.py`,
+`uv run python scripts/build_graph_features.py` (or `--backend networkx` without Neo4j),
+then `uv run python scripts/run_experiment.py --config graph_features` and
+`uv run python scripts/make_results_table.py`.

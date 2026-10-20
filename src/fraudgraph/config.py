@@ -16,6 +16,23 @@ def load_config(name: str) -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def load_experiment_config(name: str) -> dict[str, Any]:
+    """Load an experiment config, filling it in from its `base` config if it names one.
+
+    Top-level keys override the base. `models` may be a list of model names, which picks
+    those models (with their grids) from the base, so a later phase reuses a grid
+    instead of copying it (D-014).
+    """
+    cfg = load_config(name)
+    if "base" not in cfg:
+        return cfg
+    base = load_experiment_config(cfg["base"])
+    merged = base | {k: v for k, v in cfg.items() if k != "base"}
+    if isinstance(merged["models"], list):
+        merged["models"] = {m: base["models"][m] for m in merged["models"]}
+    return merged
+
+
 def resolve(path: str | Path) -> Path:
     """Resolve a config path relative to the repo root, so scripts work from any cwd."""
     p = Path(path)

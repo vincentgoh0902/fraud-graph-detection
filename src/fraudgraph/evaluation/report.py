@@ -9,7 +9,20 @@ MODEL_NAMES = {
     "random_forest": "Random forest",
     "xgboost": "XGBoost",
 }
-FEATURE_NAMES = {"local": "(a) local", "all": "(b) local + aggregated"}
+FEATURE_NAMES = {
+    "local": "(a) local",
+    "all": "(b) local + aggregated",
+    "local+graph": "(c) local + graph",
+    "all+graph": "(b) + graph",
+    "local+structure": "local + structure only",
+}
+# The comparisons that answer the research question (D-003, D-021), as (from, to).
+COMPARISONS = [
+    ("local", "all"),
+    ("local", "local+graph"),
+    ("local", "local+structure"),
+    ("all", "all+graph"),
+]
 
 
 def latest_finals(runs: pd.DataFrame) -> pd.DataFrame:
@@ -79,3 +92,60 @@ def replace_between_markers(text: str, block: str, name: str) -> str:
         raise ValueError(f"Markers {start} ... {end} not found")
     # A function replacement, so backslashes in the block are not read as escapes.
     return pattern.sub(lambda _: f"{start}\n{block}\n{end}", text)
+
+
+def comparison_table(finals: pd.DataFrame, model: str, k: int) -> str:
+    """Change in each metric along each planned comparison, for one model.
+
+    The change is the difference of the seed means. Seeds are not paired across feature
+    sets, so no spread is given for it; the per-set spreads are in the main tables.
+    """
+    metrics = {
+        "test_pr_auc": "test PR-AUC",
+        f"test_precision_at_{k}": f"precision@{k}",
+        "test_f1": "F1 (max-F1 threshold)",
+    }
+    header = ["From", "To", *[f"{name}: from → to (change)" for name in metrics.values()]]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    m = finals[finals["tags.model"] == model]
+    for src, dst in COMPARISONS:
+        a, b = m[m["tags.feature_set"] == src], m[m["tags.feature_set"] == dst]
+        if a.empty or b.empty:
+            continue
+        cells = [FEATURE_NAMES[src], FEATURE_NAMES[dst]]
+        for col in metrics:
+            x, y = a[f"metrics.{col}"].mean(), b[f"metrics.{col}"].mean()
+            change = round(y - x, 3) + 0.0  # + 0.0 turns -0.0 into 0.0, so no "-0.000"
+            cells.append(f"{x:.3f} → {y:.3f} ({change:+.3f})")
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def _signed(v: float) -> str:
+    return f"{round(v, 3) + 0.0:+.3f}"  # + 0.0 turns -0.0 into 0.0
+
+
+def interval_table(intervals: dict[tuple[str, str], dict[str, float]], k: int) -> str:
+    """The paired step bootstrap (D-024) for each comparison, in COMPARISONS order."""
+    header = [
+        "From",
+        "To",
+        "test PR-AUC change [95% interval]",
+        f"precision@{k} change [95% interval]",
+        "share of resamples where To has higher PR-AUC",
+    ]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    for src, dst in COMPARISONS:
+        r = intervals.get((src, dst))
+        if r is None:
+            continue
+        cells = [
+            FEATURE_NAMES[src],
+            FEATURE_NAMES[dst],
+            f"{_signed(r['pr_auc_change'])} [{_signed(r['pr_auc_lo'])}, {_signed(r['pr_auc_hi'])}]",
+            f"{_signed(r['precision_at_k_change'])} "
+            f"[{_signed(r['precision_at_k_lo'])}, {_signed(r['precision_at_k_hi'])}]",
+            f"{r['share_positive']:.0%}",
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)

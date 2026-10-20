@@ -184,3 +184,119 @@ precision is also what most papers mean by PR-AUC in fraud detection.
 MLflow 3.x requires `pyarrow<26`. The Phase 1 lower bound (`>=26`) was only what
 `uv add` wrote, not a real requirement; pyarrow is used for Parquet and fast CSV
 reading, which 25 handles. Loosened to `pyarrow>=24`.
+
+## D-001 update: stage-1 folds cover steps 1–29, not 1–34 (Phase 3)
+D-001 was written before D-009 moved training to steps 1–29. The scheme now is:
+train-period nodes (1–29) are scored out-of-fold, by a stage-1 model trained on the
+other folds (GroupKFold, 5 folds, grouped by time step); validation (30–34) and test
+(35–49) nodes are scored by one stage-1 model trained on all labelled nodes in 1–29.
+That is the same model the protocol keeps (no refit, D-009), so validation and test
+features are built the same way. Unknown-label nodes are scored too, because they are
+neighbours of labelled ones. Fold models trained on later steps do score earlier
+training steps; that uses no validation or test information, only other training data.
+
+## D-018: Stage-1 uses the same base features as the comparison
+**Decision.** For feature set (c) (local + graph), the stage-1 model that produces
+predicted risk uses local features only. For (b) + graph it uses all features. Its
+settings are the Phase 2 XGBoost winner for that feature set, read from MLflow, with one
+fixed seed (0).
+**Why.** If (c)'s stage-1 used the aggregated features, the neighbour-risk columns would
+carry them into (c), and the (a)→(c) comparison would credit our graph features with
+information from the 72 aggregated ones. Reusing the Phase 2 winner means stage-1 needs
+no tuning of its own.
+**Limitation.** A single stage-1 seed makes the graph features one fixed table, so the
+seed spread reported for stage 2 does not include variation from stage 1.
+
+## D-019: Neo4j GDS computes the features; NetworkX/NumPy cross-check them
+**Decision.** Structural features (degree, PageRank, clustering, Louvain) come from Neo4j
+GDS and are saved to `data/processed/graph_features.parquet`, so experiments run without
+Neo4j. A second implementation (NetworkX, plus a small NumPy PageRank that uses the same
+formula as GDS) computes the same features. CI has no Neo4j, so CI tests use the second
+implementation; a local integration test checks that the two agree on the real graph.
+**Why.** The brief wants Neo4j doing real work, but results that can only be reproduced
+with a running database are fragile. Two implementations that agree are also a check on
+each other. This is the first piece of the two-backend graph interface in D-008.
+**PageRank detail.** GDS uses the unnormalised form PR = (1 − d) + d · Σ PR(in)/outdeg(in)
+and does not redistribute the rank of nodes without outgoing edges. NetworkX's
+`pagerank` normalises over the whole graph and spreads that rank over *all* nodes, which
+would couple different time steps slightly. The NumPy version follows GDS, so the scores
+of one time step never depend on another.
+**No labels in Neo4j.** Only `tx_id`, `time_step` and edges are loaded, so no graph
+algorithm can see a label.
+
+## D-020: Louvain runs single-threaded, on a single-threaded projection
+GDS Louvain can return different communities between runs when it uses several threads.
+**Finding.** `concurrency: 1` on Louvain alone was not enough: three runs on the real graph
+gave 265–280 communities, with an adjusted Rand index (ARI, 1 = identical partition) of
+0.96–0.98 between runs. The in-memory projection was loaded in parallel, which assigns
+internal node ids in a different order each time, and Louvain's result depends on node
+order. With the projection also loaded single-threaded (`readConcurrency: 1`), three runs
+gave identical partitions (ARI 1.0, 283 communities each).
+**Decision.** Both settings are used; the integration test runs the GDS features twice and
+requires ARI 1.0. The NetworkX fallback uses a fixed seed. The two implementations are not
+expected to find identical communities (on the real graph: 283 vs 319, ARI ≈ 0.94), so
+they are compared only loosely.
+
+## D-021: Structure-only ablation
+**Decision.** Besides (c) = local + all graph features and (b) + graph, run local +
+structure only: degree, PageRank, clustering, community size and density, without any
+feature built from stage-1 predicted risk.
+**Why.** Neighbour risk and community risk feed one model's predictions into another,
+which is a form of stacking. If (c) beats (a), the ablation shows how much of the gain
+comes from the graph's shape and how much from passing predicted risk along edges.
+
+## D-022: No random forest in Phase 3
+**Decision.** Phase 3 trains only XGBoost on the graph feature sets. Random forest is not
+re-run with graph features. (Decided by the project owner when approving the Phase 3 plan.)
+**Why.**
+- The brief's Phase 3 criterion is "XGBoost with graph features is evaluated and compared".
+- One model keeps the question about features: every Phase 3 difference against Phase 2
+  XGBoost comes from the feature set, at the same grid and seeds (D-014).
+- In Phase 2, random forest and XGBoost were within 0.005 test PR-AUC of each other on
+  both feature sets (0.781 vs 0.778 on (a), 0.786 vs 0.791 on (b)), so a second tree
+  ensemble would likely repeat XGBoost's answer while doubling the runs.
+- XGBoost is also the model Phase 4's hybrid (GNN embeddings + XGBoost) builds on, so it
+  is the comparison that carries forward.
+**Cost.** We cannot say whether random forest would gain more or less from graph features
+than XGBoost. If that question matters later, it can be run with the same config.
+
+## D-023: Finding — Louvain communities are nearly whole time steps
+**Evidence (training steps 1–34, GDS Louvain).** Louvain finds a median of 5 communities
+per step (1 to 20), and the largest covers 81% of its step on average (50% to 100%). The
+34 training steps contain 148 distinct community sizes. NetworkX's Louvain finds a similar
+partition (D-020), so this is a property of the graph, not of one implementation: each
+step is one connected component, sparse and dominated by hub transactions.
+**What it means.** The community features describe the time step more than a local group:
+`community_size` is close to a step identifier, and `community_risk_mean` is close to
+the step's mean predicted risk. That is the concern behind D-013 (patterns tied to
+specific past steps do not transfer). It is not leakage, because both are computed from
+that step's own transactions and stage-1 predictions, which exist at prediction time.
+**Decision.** Keep the features as planned and approved, and report this with the results.
+The structure-only ablation (D-021) and Phase 5's SHAP analysis show whether the model
+leans on them. If a later phase replaces them (for example with a higher Louvain
+resolution, or with smaller neighbourhoods such as k-hop counts), it gets a new entry and
+the change is chosen on validation only.
+
+## D-024: Paired bootstrap over test steps for feature-set comparisons
+**Context.** The Phase 3 changes were small (+0.004 test PR-AUC for (b) → (b) + graph). The
+seed spread (about ±0.001) only shows the model is stable across seeds; it says nothing
+about whether the change would hold on other test data.
+**Decision.** For each comparison in the README, draw the 15 test steps with replacement
+(1,000 times, seed 0), score both feature sets on exactly that resample, and record the
+change in PR-AUC and precision@20. Report the observed change, its 95% percentile
+interval, and the share of resamples in which the second set has higher PR-AUC.
+**Why whole steps.** Transactions in one step share market conditions and one connected
+graph, so they are not independent. Resampling single transactions would understate the
+uncertainty (the same limitation noted in D-005).
+**Why paired.** Both sets are scored on the same resample, so a hard or easy step affects
+both and cancels out of the difference. Unpaired intervals for each set would overlap far
+more and hide a consistent difference.
+**Honesty notes.** This was added after the Phase 3 test results were seen, because the
+point estimates looked small. It is measurement only: it selects nothing and changes no
+model, threshold or feature. To get per-transaction scores, the protocol now logs each
+final run's test scores, and the Phase 2 XGBoost runs were re-run to produce them. The
+re-run reproduced the logged Phase 2 metrics, as expected from deterministic training.
+**Limitation.** 15 steps is a small number of clusters, and percentile intervals from few
+clusters tend to be somewhat too narrow; the late steps with very few illicit
+transactions (after the dark-market shutdown; Phase 5) add most of the variation. Read the interval as
+approximate, and an interval that only just excludes zero as weak evidence.

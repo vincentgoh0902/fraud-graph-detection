@@ -1,0 +1,23 @@
+# Phase 3: graph features. See docs/decisions.md D-001, D-018 to D-020.
+output: data/processed/graph_features.parquet
+
+neo4j:
+  # Connection comes from NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD in .env.
+  database: neo4j
+  batch_size: 10000   # rows per UNWIND when loading nodes and edges
+
+pagerank:
+  damping: 0.85
+  # Tighter than the GDS defaults (20 iterations, 1e-7), so GDS and the SciPy
+  # cross-check both converge and can be compared closely.
+  max_iterations: 100
+  tolerance: 1.0e-9
+
+louvain:
+  concurrency: 1   # single-threaded, so communities are reproducible (D-020)
+  seed: 0          # NetworkX fallback only
+
+stage1:
+  n_folds: 5            # GroupKFold over the training steps, grouped by step (D-001)
+  seed: 0               # one fixed seed (D-018)
+  bases: [local, all]   # stage-1 feature set per comparison base (D-018)
