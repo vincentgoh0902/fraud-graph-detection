@@ -241,7 +241,136 @@ per kept model ([D-014](docs/decisions.md), [D-027](docs/decisions.md)).
   ([D-025](docs/decisions.md)).
 
 <!-- results-phase4:start -->
+**Ranking quality** (test steps 35–49; precision/recall@K are per-step means)
+
+| Model | Features | Seeds | Val PR-AUC | Test PR-AUC | Precision@20 | Recall@20 |
+|---|---|---|---|---|---|---|
+| GCN | (a) local | 3 | 0.909 ± 0.007 | 0.482 ± 0.030 | 0.431 ± 0.013 | 0.100 ± 0.002 |
+| GraphSAGE | (a) local | 3 | 0.956 ± 0.003 | 0.577 ± 0.011 | 0.532 ± 0.008 | 0.173 ± 0.004 |
+| GCN | (b) local + aggregated | 3 | 0.897 ± 0.009 | 0.464 ± 0.044 | 0.424 ± 0.014 | 0.129 ± 0.003 |
+| GraphSAGE | (b) local + aggregated | 3 | 0.957 ± 0.008 | 0.526 ± 0.031 | 0.446 ± 0.003 | 0.131 ± 0.018 |
+| XGBoost | (a) + GNN embeddings (hybrid) | 3 | 0.975 ± 0.000 | 0.673 ± 0.018 | 0.540 ± 0.012 | 0.177 ± 0.012 |
+| XGBoost | (b) + GNN embeddings (hybrid) | 3 | 0.966 ± 0.002 | 0.649 ± 0.028 | 0.504 ± 0.017 | 0.160 ± 0.008 |
+
+**Decisions at the validation-tuned threshold** (left: max-F1 threshold; right: cost threshold, a miss costs 10× a false alarm)
+
+| Model | Features | Seeds | Precision | Recall | F1 | Precision (cost) | Recall (cost) | F1 (cost) |
+|---|---|---|---|---|---|---|---|---|
+| GCN | (a) local | 3 | 0.551 ± 0.032 | 0.402 ± 0.039 | 0.464 ± 0.023 | 0.261 ± 0.027 | 0.654 ± 0.057 | 0.372 ± 0.020 |
+| GraphSAGE | (a) local | 3 | 0.685 ± 0.010 | 0.578 ± 0.014 | 0.627 ± 0.011 | 0.345 ± 0.014 | 0.694 ± 0.013 | 0.460 ± 0.011 |
+| GCN | (b) local + aggregated | 3 | 0.588 ± 0.040 | 0.460 ± 0.039 | 0.515 ± 0.027 | 0.409 ± 0.099 | 0.624 ± 0.060 | 0.485 ± 0.061 |
+| GraphSAGE | (b) local + aggregated | 3 | 0.609 ± 0.070 | 0.576 ± 0.006 | 0.591 ± 0.031 | 0.480 ± 0.047 | 0.631 ± 0.016 | 0.544 ± 0.026 |
+| XGBoost | (a) + GNN embeddings (hybrid) | 3 | 0.661 ± 0.052 | 0.602 ± 0.038 | 0.628 ± 0.007 | 0.345 ± 0.009 | 0.708 ± 0.020 | 0.463 ± 0.003 |
+| XGBoost | (b) + GNN embeddings (hybrid) | 3 | 0.671 ± 0.050 | 0.566 ± 0.001 | 0.614 ± 0.020 | 0.459 ± 0.094 | 0.681 ± 0.046 | 0.542 ± 0.057 |
+
+Mean ± sample standard deviation over seeds.
+
+**All models** (test steps 35–49; F1 at the max-F1 and the cost threshold, both tuned on validation)
+
+| Model | Features | Seeds | Val PR-AUC | Test PR-AUC | Precision@20 | Recall@20 | F1 | F1 (cost) |
+|---|---|---|---|---|---|---|---|---|
+| Logistic regression | (a) local | 1 | 0.836 | 0.267 | 0.133 | 0.083 | 0.523 | 0.319 |
+| Random forest | (a) local | 3 | 0.989 ± 0.000 | 0.781 ± 0.001 | 0.543 ± 0.000 | 0.176 ± 0.000 | 0.752 ± 0.011 | 0.649 ± 0.014 |
+| XGBoost | (a) local | 3 | 0.988 ± 0.000 | 0.778 ± 0.003 | 0.550 ± 0.000 | 0.181 ± 0.001 | 0.742 ± 0.007 | 0.569 ± 0.065 |
+| Logistic regression | (b) local + aggregated | 1 | 0.770 | 0.231 | 0.107 | 0.074 | 0.396 | 0.292 |
+| Random forest | (b) local + aggregated | 3 | 0.990 ± 0.000 | 0.786 ± 0.004 | 0.545 ± 0.002 | 0.177 ± 0.001 | 0.788 ± 0.014 | 0.657 ± 0.030 |
+| XGBoost | (b) local + aggregated | 3 | 0.990 ± 0.001 | 0.791 ± 0.000 | 0.553 ± 0.003 | 0.182 ± 0.002 | 0.782 ± 0.003 | 0.711 ± 0.055 |
+| XGBoost | (c) local + graph | 3 | 0.993 ± 0.001 | 0.788 ± 0.001 | 0.552 ± 0.002 | 0.180 ± 0.001 | 0.760 ± 0.011 | 0.669 ± 0.016 |
+| XGBoost | local + structure only | 3 | 0.990 ± 0.000 | 0.776 ± 0.001 | 0.550 ± 0.003 | 0.179 ± 0.002 | 0.736 ± 0.007 | 0.627 ± 0.045 |
+| XGBoost | (b) + graph | 3 | 0.994 ± 0.000 | 0.795 ± 0.001 | 0.562 ± 0.002 | 0.187 ± 0.001 | 0.794 ± 0.005 | 0.719 ± 0.039 |
+| GCN | (a) local | 3 | 0.909 ± 0.007 | 0.482 ± 0.030 | 0.431 ± 0.013 | 0.100 ± 0.002 | 0.464 ± 0.023 | 0.372 ± 0.020 |
+| GCN | (b) local + aggregated | 3 | 0.897 ± 0.009 | 0.464 ± 0.044 | 0.424 ± 0.014 | 0.129 ± 0.003 | 0.515 ± 0.027 | 0.485 ± 0.061 |
+| GraphSAGE | (a) local | 3 | 0.956 ± 0.003 | 0.577 ± 0.011 | 0.532 ± 0.008 | 0.173 ± 0.004 | 0.627 ± 0.011 | 0.460 ± 0.011 |
+| GraphSAGE | (b) local + aggregated | 3 | 0.957 ± 0.008 | 0.526 ± 0.031 | 0.446 ± 0.003 | 0.131 ± 0.018 | 0.591 ± 0.031 | 0.544 ± 0.026 |
+| XGBoost | (a) + GNN embeddings (hybrid) | 3 | 0.975 ± 0.000 | 0.673 ± 0.018 | 0.540 ± 0.012 | 0.177 ± 0.012 | 0.628 ± 0.007 | 0.463 ± 0.003 |
+| XGBoost | (b) + GNN embeddings (hybrid) | 3 | 0.966 ± 0.002 | 0.649 ± 0.028 | 0.504 ± 0.017 | 0.160 ± 0.008 | 0.614 ± 0.020 | 0.542 ± 0.057 |
+
+**Imbalance handling: weighted cross-entropy vs focal loss** (validation only; best grid setting per loss, mean over seeds; [D-029](docs/decisions.md))
+
+| Model | Features | Weighted CE: best val PR-AUC | Focal: best val PR-AUC | Selected |
+|---|---|---|---|---|
+| GCN | (a) local | 0.909 | 0.905 | weighted CE |
+| GCN | (b) local + aggregated | 0.896 | 0.897 | focal |
+| GraphSAGE | (a) local | 0.956 | 0.956 | weighted CE |
+| GraphSAGE | (b) local + aggregated | 0.957 | 0.957 | weighted CE |
+
+**Kept GNN checkpoints** (epoch per seed, and PR-AUC on training vs validation nodes; [D-027](docs/decisions.md), [D-028](docs/decisions.md))
+
+| Model | Features | Seeds | Kept epoch | Train PR-AUC | Val PR-AUC |
+|---|---|---|---|---|---|
+| GCN | (a) local | 3 | 148, 192, 228 | 0.937 ± 0.009 | 0.909 ± 0.007 |
+| GCN | (b) local + aggregated | 3 | 126, 95, 107 | 0.970 ± 0.006 | 0.897 ± 0.009 |
+| GraphSAGE | (a) local | 3 | 192, 378, 181 | 0.989 ± 0.003 | 0.956 ± 0.003 |
+| GraphSAGE | (b) local + aggregated | 3 | 299, 166, 337 | 0.998 ± 0.001 | 0.957 ± 0.008 |
+
+**How sure is each change?** Paired bootstrap over test steps: 1000 resamples of the 15 test steps ([D-024](docs/decisions.md)). Best GNN by validation PR-AUC: (a) local: GraphSAGE, (b) local + aggregated: GraphSAGE.
+
+| From | To | test PR-AUC change [95% interval] | precision@20 change [95% interval] | share of resamples where To has higher PR-AUC |
+|---|---|---|---|---|
+| XGBoost, (a) local | GraphSAGE, (a) local | -0.202 [-0.402, -0.067] | -0.018 [-0.046, +0.016] | 0% |
+| XGBoost, (b) local + aggregated | GraphSAGE, (b) local + aggregated | -0.265 [-0.383, -0.174] | -0.107 [-0.216, -0.006] | 0% |
+| XGBoost, (a) local | XGBoost, (a) + GNN embeddings (hybrid) | -0.105 [-0.211, -0.045] | -0.010 [-0.033, +0.017] | 0% |
+| XGBoost, (b) local + aggregated | XGBoost, (b) + GNN embeddings (hybrid) | -0.142 [-0.247, -0.083] | -0.049 [-0.119, +0.007] | 0% |
+| GCN, (a) local | GraphSAGE, (a) local | +0.095 [-0.064, +0.245] | +0.101 [+0.031, +0.193] | 87% |
+| GCN, (b) local + aggregated | GraphSAGE, (b) local + aggregated | +0.062 [+0.012, +0.115] | +0.022 [-0.047, +0.084] | 100% |
+
+![Illicit F1 per test step](docs/figures/per_step_f1.png)
+
+<details><summary>The figure's numbers (illicit F1 per test step, mean over seeds)</summary>
+
+| Step | Illicit | XGBoost (b) | XGBoost (b) + graph features | GCN (b) | GraphSAGE (b) | Hybrid: XGBoost (b) + embeddings |
+|---|---|---|---|---|---|---|
+| 35 | 182 | 0.958 | 0.964 | 0.775 | 0.841 | 0.861 |
+| 36 | 33 | 0.842 | 0.850 | 0.238 | 0.397 | 0.418 |
+| 37 | 40 | 0.776 | 0.761 | 0.452 | 0.566 | 0.571 |
+| 38 | 111 | 0.931 | 0.935 | 0.509 | 0.683 | 0.716 |
+| 39 | 81 | 0.933 | 0.908 | 0.553 | 0.584 | 0.565 |
+| 40 | 112 | 0.759 | 0.763 | 0.469 | 0.546 | 0.554 |
+| 41 | 116 | 0.952 | 0.919 | 0.522 | 0.604 | 0.626 |
+| 42 | 239 | 0.843 | 0.871 | 0.713 | 0.750 | 0.767 |
+| 43 | 24 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| 44 | 24 | 0.037 | 0.044 | 0.049 | 0.047 | 0.056 |
+| 45 | 5 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| 46 | 2 | 0.144 | 0.207 | 0.411 | 0.056 | 0.000 |
+| 47 | 22 | 0.000 | 0.000 | 0.000 | 0.025 | 0.000 |
+| 48 | 36 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+| 49 | 56 | 0.030 | 0.032 | 0.009 | 0.011 | 0.011 |
+
+</details>
 <!-- results-phase4:end -->
+
+**Reading it.** This is a negative result, and a clear one.
+- **GNNs lose to XGBoost.** The best GNN, GraphSAGE on local features, reaches test PR-AUC
+  0.577 against XGBoost's 0.778 on the same features. On both feature sets the bootstrap
+  interval for the change is well below zero.
+- **The hybrid is worse than XGBoost alone.** Adding GraphSAGE embeddings lowers test
+  PR-AUC from 0.791 to 0.649 on (b), and from 0.778 to 0.673 on (a). It is also lower on
+  *validation* (0.966 vs 0.990 on (b)), so the protocol would never have chosen it; it is
+  scored on test only because the comparison was fixed in advance
+  ([D-031](docs/decisions.md)). A likely cause is the in-sample embeddings of
+  [D-028](docs/decisions.md): GraphSAGE's PR-AUC on its own training nodes is 0.998 on (b)
+  but 0.957 on validation, so XGBoost learns from embeddings that are cleaner than the
+  ones it is scored on. That explanation fits the numbers but has not been tested.
+- **The GNNs drop much more from validation to test.** GraphSAGE goes from 0.956 to 0.577,
+  XGBoost from 0.988 to 0.778. The gap opens *before* the late collapse: in steps 36–41
+  GraphSAGE's F1 is 0.40–0.68 where XGBoost's is 0.76–0.95. After step 42 every model
+  collapses alike, which Phase 5 investigates.
+- **GraphSAGE beats GCN**, clearly on (b) (+0.062 test PR-AUC, interval above zero), not
+  clearly on (a). GraphSAGE keeps a separate weight for a transaction's own features while
+  GCN averages them with its neighbours'. That may matter when most neighbours are
+  unlabelled or licit, but it is a hypothesis, not a tested result.
+- **Aggregated features do not help the GNNs** (GraphSAGE 0.577 on (a), 0.526 on (b)), which
+  is plausible because a GNN computes its own neighbourhood aggregates. This pair was not
+  in the planned bootstrap comparisons, so treat it as an observation.
+- **Focal loss vs weighted cross-entropy makes no difference** on validation: the best
+  setting of each is within 0.004.
+
+Together with Phase 3, the answer to the research question so far is no. On Elliptic's
+temporal split, neither engineered graph features nor graph neural networks improve on
+XGBoost with the dataset's own features. The original Elliptic paper (Weber et al., 2019)
+also found random forest ahead of GCN. One limitation: one GCN setting was still improving
+at the 500-epoch cap ([D-032](docs/decisions.md)). That affects only which GCN setting
+wins, not GCN's place behind XGBoost.
 
 Reproduce with `uv run python scripts/run_experiment.py --config gnn`, then
 `--config hybrid` (a separate process: torch and XGBoost cannot share one,
