@@ -355,8 +355,12 @@ Mean ± sample standard deviation over seeds.
   XGBoost from 0.988 to 0.778. The gap opens *before* the late collapse: in steps 36–41
   GraphSAGE's F1 is 0.40–0.68 where XGBoost's is 0.76–0.95. After step 42 every model
   collapses alike, which Phase 5 investigates.
-- **GraphSAGE beats GCN**, clearly on (b) (+0.062 test PR-AUC, interval above zero), not
-  clearly on (a). GraphSAGE keeps a separate weight for a transaction's own features while
+- **GraphSAGE is ahead of GCN** on both feature sets, on validation (0.956 vs 0.909 on (a),
+  0.957 vs 0.897 on (b)) and on test. The test gap is outside bootstrap noise on (b), but
+  only just (+0.062, interval [+0.012, +0.115]), and within it on (a) (+0.095, interval
+  [−0.064, +0.245]): the gap on (a) is larger on average but varies more from step to step.
+  The intervals are not corrected for the six planned comparisons and rest on 15 test
+  steps, so "probably ahead, by a modest margin" is as far as this goes. GraphSAGE keeps a separate weight for a transaction's own features while
   GCN averages them with its neighbours'. That may matter when most neighbours are
   unlabelled or licit, but it is a hypothesis, not a tested result.
 - **Aggregated features do not help the GNNs** (GraphSAGE 0.577 on (a), 0.526 on (b)), which
