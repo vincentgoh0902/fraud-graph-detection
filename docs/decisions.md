@@ -207,10 +207,10 @@ no tuning of its own.
 **Limitation.** A single stage-1 seed makes the graph features one fixed table, so the
 seed spread reported for stage 2 does not include variation from stage 1.
 
-## D-019: Neo4j GDS computes the features; NetworkX/SciPy cross-check them
+## D-019: Neo4j GDS computes the features; NetworkX/NumPy cross-check them
 **Decision.** Structural features (degree, PageRank, clustering, Louvain) come from Neo4j
 GDS and are saved to `data/processed/graph_features.parquet`, so experiments run without
-Neo4j. A second implementation (NetworkX, plus a small SciPy PageRank that uses the same
+Neo4j. A second implementation (NetworkX, plus a small NumPy PageRank that uses the same
 formula as GDS) computes the same features. CI has no Neo4j, so CI tests use the second
 implementation; a local integration test checks that the two agree on the real graph.
 **Why.** The brief wants Neo4j doing real work, but results that can only be reproduced
@@ -219,7 +219,7 @@ each other. This is the first piece of the two-backend graph interface in D-008.
 **PageRank detail.** GDS uses the unnormalised form PR = (1 − d) + d · Σ PR(in)/outdeg(in)
 and does not redistribute the rank of nodes without outgoing edges. NetworkX's
 `pagerank` normalises over the whole graph and spreads that rank over *all* nodes, which
-would couple different time steps slightly. The SciPy version follows GDS, so the scores
+would couple different time steps slightly. The NumPy version follows GDS, so the scores
 of one time step never depend on another.
 **No labels in Neo4j.** Only `tx_id`, `time_step` and edges are loaded, so no graph
 algorithm can see a label.
