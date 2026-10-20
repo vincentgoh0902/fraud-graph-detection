@@ -12,12 +12,14 @@ exactly one place, after selection is finished.
 """
 
 import itertools
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import mlflow
 import numpy as np
+import pandas as pd
 
 from fraudgraph.data.split import TemporalSplit
 from fraudgraph.evaluation.metrics import (
@@ -106,10 +108,12 @@ def run_protocol(
     split: TemporalSplit,
     cfg: EvalConfig,
     tags: dict[str, str],
+    ids: np.ndarray | None = None,
 ) -> ProtocolResult:
     """Select on validation, evaluate the selection on test, log everything to MLflow.
 
     y and steps cover all nodes; the split masks pick out each period's labelled ones.
+    ids (transaction ids, optional) are saved with the test scores.
     """
     y_val = y[split.val]
     prefix = "/".join(tags[k] for k in ("model", "feature_set") if k in tags)
@@ -154,6 +158,17 @@ def run_protocol(
             )
             mlflow.log_metrics(metrics)
             mlflow.log_text(step_table.to_csv(), "per_step_test.csv")
+            # Per-transaction test scores, for the paired bootstrap between feature sets
+            # (D-024) and per-step analysis later. Rows are in test-mask order.
+            scores = pd.DataFrame(
+                {"time_step": steps[split.test], "label": y[split.test], "score": test_score}
+            )
+            if ids is not None:
+                scores.insert(0, "tx_id", ids[split.test])
+            with tempfile.TemporaryDirectory() as tmp:
+                path = f"{tmp}/test_scores.parquet"
+                scores.to_parquet(path, index=False)
+                mlflow.log_artifact(path)
         finals.append(metrics)
 
     return ProtocolResult(params=best_params, final_metrics=finals)

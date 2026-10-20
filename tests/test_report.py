@@ -72,3 +72,21 @@ def test_comparison_table_uses_seed_means():
     assert "| (b) local + aggregated | (b) + graph | 0.600 → 0.800 (+0.200) |" in out
     assert "| (a) local | (b) local + aggregated | 0.400 → 0.600 (+0.200) |" in out
     assert "(c) local + graph" not in out  # no runs for it: row skipped
+
+
+def test_interval_table_formats_changes_and_skips_missing():
+    from fraudgraph.evaluation.report import interval_table
+
+    r = {
+        "pr_auc_change": 0.004,
+        "pr_auc_lo": -0.0001,
+        "pr_auc_hi": 0.01,
+        "precision_at_k_change": 0.009,
+        "precision_at_k_lo": -0.002,
+        "precision_at_k_hi": 0.02,
+        "share_positive": 0.9,
+    }
+    out = interval_table({("all", "all+graph"): r}, k=20)
+    assert "| (b) local + aggregated | (b) + graph | +0.004 [+0.000, +0.010] |" in out
+    assert "| 90% |" in out
+    assert "(c) local + graph" not in out

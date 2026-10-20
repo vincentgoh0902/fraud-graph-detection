@@ -276,3 +276,27 @@ The structure-only ablation (D-021) and Phase 5's SHAP analysis show whether the
 leans on them. If a later phase replaces them (for example with a higher Louvain
 resolution, or with smaller neighbourhoods such as k-hop counts), it gets a new entry and
 the change is chosen on validation only.
+
+## D-024: Paired bootstrap over test steps for feature-set comparisons
+**Context.** The Phase 3 changes were small (+0.004 test PR-AUC for (b) → (b) + graph). The
+seed spread (about ±0.001) only shows the model is stable across seeds; it says nothing
+about whether the change would hold on other test data.
+**Decision.** For each comparison in the README, draw the 15 test steps with replacement
+(1,000 times, seed 0), score both feature sets on exactly that resample, and record the
+change in PR-AUC and precision@20. Report the observed change, its 95% percentile
+interval, and the share of resamples in which the second set has higher PR-AUC.
+**Why whole steps.** Transactions in one step share market conditions and one connected
+graph, so they are not independent. Resampling single transactions would understate the
+uncertainty (the same limitation noted in D-005).
+**Why paired.** Both sets are scored on the same resample, so a hard or easy step affects
+both and cancels out of the difference. Unpaired intervals for each set would overlap far
+more and hide a consistent difference.
+**Honesty notes.** This was added after the Phase 3 test results were seen, because the
+point estimates looked small. It is measurement only: it selects nothing and changes no
+model, threshold or feature. To get per-transaction scores, the protocol now logs each
+final run's test scores, and the Phase 2 XGBoost runs were re-run to produce them. The
+re-run reproduced the logged Phase 2 metrics, as expected from deterministic training.
+**Limitation.** 15 steps is a small number of clusters, and percentile intervals from few
+clusters tend to be somewhat too narrow; the late steps with very few illicit
+transactions (after the dark-market shutdown; Phase 5) add most of the variation. Read the interval as
+approximate, and an interval that only just excludes zero as weak evidence.

@@ -119,3 +119,33 @@ def comparison_table(finals: pd.DataFrame, model: str, k: int) -> str:
             cells.append(f"{x:.3f} → {y:.3f} ({change:+.3f})")
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
+
+
+def _signed(v: float) -> str:
+    return f"{round(v, 3) + 0.0:+.3f}"  # + 0.0 turns -0.0 into 0.0
+
+
+def interval_table(intervals: dict[tuple[str, str], dict[str, float]], k: int) -> str:
+    """The paired step bootstrap (D-024) for each comparison, in COMPARISONS order."""
+    header = [
+        "From",
+        "To",
+        "test PR-AUC change [95% interval]",
+        f"precision@{k} change [95% interval]",
+        "share of resamples where To has higher PR-AUC",
+    ]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    for src, dst in COMPARISONS:
+        r = intervals.get((src, dst))
+        if r is None:
+            continue
+        cells = [
+            FEATURE_NAMES[src],
+            FEATURE_NAMES[dst],
+            f"{_signed(r['pr_auc_change'])} [{_signed(r['pr_auc_lo'])}, {_signed(r['pr_auc_hi'])}]",
+            f"{_signed(r['precision_at_k_change'])} "
+            f"[{_signed(r['precision_at_k_lo'])}, {_signed(r['precision_at_k_hi'])}]",
+            f"{r['share_positive']:.0%}",
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)

@@ -5,3 +5,9 @@ experiment: graph_features
 phase: "3"
 feature_sets: [local+graph, all+graph, local+structure]  # D-003, D-021
 models: [xgboost]                                         # D-022
+
+# Paired bootstrap over test steps for the README comparison table (D-024). Measurement
+# only: nothing is selected with it.
+comparison:
+  n_bootstrap: 1000
+  seed: 0

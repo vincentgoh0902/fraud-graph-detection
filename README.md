@@ -189,16 +189,28 @@ Mean ± sample standard deviation over seeds.
 | (a) local | (c) local + graph | 0.778 → 0.788 (+0.010) | 0.550 → 0.552 (+0.002) | 0.742 → 0.760 (+0.018) |
 | (a) local | local + structure only | 0.778 → 0.776 (-0.002) | 0.550 → 0.550 (+0.000) | 0.742 → 0.736 (-0.007) |
 | (b) local + aggregated | (b) + graph | 0.791 → 0.795 (+0.004) | 0.553 → 0.562 (+0.009) | 0.782 → 0.794 (+0.012) |
+
+**How sure is each change?** Paired bootstrap over test steps: 1000 resamples of the 15 test steps, both feature sets scored on the same resample ([D-024](docs/decisions.md)).
+
+| From | To | test PR-AUC change [95% interval] | precision@20 change [95% interval] | share of resamples where To has higher PR-AUC |
+|---|---|---|---|---|
+| (a) local | (b) local + aggregated | +0.013 [+0.003, +0.025] | +0.003 [-0.014, +0.024] | 99% |
+| (a) local | (c) local + graph | +0.010 [+0.003, +0.017] | +0.002 [-0.014, +0.019] | 100% |
+| (a) local | local + structure only | -0.002 [-0.007, +0.003] | +0.000 [-0.010, +0.010] | 33% |
+| (b) local + aggregated | (b) + graph | +0.004 [-0.005, +0.013] | +0.009 [+0.000, +0.027] | 85% |
 <!-- results-phase3:end -->
 
-**Reading it.** Graph features give a small gain on top of all Elliptic features, smaller
-than the gain the provided aggregated features give on top of local ones. Graph shape on
-its own adds nothing: the structure-only set is no better than local features. What helps
-is risk passed along edges, a stage-1 model's predictions averaged over neighbours and
-communities. The gains are larger than the seed spread, but the seed spread does not cover
-the uncertainty from having only 15 test steps, or from the single stage-1 seed
-([D-018](docs/decisions.md)). Whether the gain survives the late-timeline collapse is
-analysed per step in Phase 5.
+**Reading it.** On top of all Elliptic features, our graph features give no improvement
+that can be told apart from zero: the bootstrap interval for the PR-AUC change includes
+zero, and the precision@20 interval only just reaches it. Graph shape on its own adds
+nothing. Graph information does help in one form, neighbourhood statistics: the dataset's
+aggregated features clearly improve on local features, and our graph features, which
+include risk averaged over neighbours, improve on local features by a similar amount
+when used *instead* of them. So the graph information is real but already captured by
+Elliptic's aggregated features. The intervals are approximate with only 15 test steps
+([D-024](docs/decisions.md)), and whether any effect changes after the late-timeline
+collapse is analysed per step in Phase 5. GNNs (Phase 4) use the graph differently, so
+this result is about engineered graph features, not graph learning in general.
 
 Reproduce with `docker compose up -d neo4j`, `uv run python scripts/load_neo4j.py`,
 `uv run python scripts/build_graph_features.py` (or `--backend networkx` without Neo4j),

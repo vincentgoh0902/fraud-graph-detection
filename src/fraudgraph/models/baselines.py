@@ -105,5 +105,6 @@ def run_baselines(
                 split,
                 eval_cfg,
                 tags,
+                ids=data.nodes["tx_id"].to_numpy(),
             )
     return results
