@@ -90,3 +90,41 @@ def test_interval_table_formats_changes_and_skips_missing():
     assert "| (b) local + aggregated | (b) + graph | +0.004 [+0.000, +0.010] |" in out
     assert "| 90% |" in out
     assert "(c) local + graph" not in out
+
+
+def gnn_runs():
+    """Candidates and finals for one GNN: config 0 weighted CE, config 1 focal."""
+    rows = []
+    for config, loss, vals in [("0", "weighted_ce", [0.70, 0.72]), ("1", "focal", [0.80, 0.78])]:
+        for seed, v in enumerate(vals):
+            rows.append(("gcn", "all", "g", "candidate", config, str(seed), loss, v, 0.9, 12.0))
+    for seed, v in enumerate([0.80, 0.78]):
+        rows.append(("gcn", "all", "g", "final", "1", str(seed), "focal", v, 0.95, 40.0 + seed))
+    cols = ["tags.model", "tags.feature_set", "tags.run_group", "tags.role", "tags.config_id",
+            "tags.seed", "params.loss", "metrics.val_pr_auc", "metrics.train_pr_auc",
+            "metrics.best_epoch"]  # fmt: skip
+    return pd.DataFrame(rows, columns=cols)
+
+
+def test_loss_table_compares_best_config_per_loss_on_validation():
+    from fraudgraph.evaluation.report import loss_table
+
+    out = loss_table(gnn_runs())
+    assert "| GCN | (b) local + aggregated | 0.710 | 0.790 | focal |" in out
+
+
+def test_checkpoint_table_lists_epochs_and_train_vs_val():
+    from fraudgraph.evaluation.report import checkpoint_table
+
+    out = checkpoint_table(latest_finals(gnn_runs()))
+    assert "| GCN | (b) local + aggregated | 2 | 40, 41 | 0.950 ± 0.000 | 0.790 ± 0.014 |" in out
+
+
+def test_pair_interval_table_uses_given_labels():
+    from fraudgraph.evaluation.report import pair_interval_table
+
+    r = {"pr_auc_change": -0.02, "pr_auc_lo": -0.05, "pr_auc_hi": 0.01,
+         "precision_at_k_change": 0.0, "precision_at_k_lo": -0.01, "precision_at_k_hi": 0.01,
+         "share_positive": 0.1}  # fmt: skip
+    out = pair_interval_table([("XGBoost, (b)", "GCN, (b)", r)], k=20)
+    assert "| XGBoost, (b) | GCN, (b) | -0.020 [-0.050, +0.010] |" in out
