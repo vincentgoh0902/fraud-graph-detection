@@ -48,6 +48,8 @@ def mean_std(values: pd.Series) -> str:
     return f"{v.mean():.3f} ± {v.std(ddof=1):.3f}"
 
 
+LOSS_NAMES = {"weighted_ce": "weighted CE", "focal": "focal"}
+
 # Row order of the all-model table (Phase 4): tabular models, then graph features, then
 # GNNs, then the hybrids, each on (a) before (b).
 ALL_MODELS_ORDER = [
@@ -196,7 +198,7 @@ def loss_table(runs: pd.DataFrame) -> str:
         cells += [f"{best.get(loss, float('nan')):.3f}" for loss in ("weighted_ce", "focal")]
         # The loss the protocol actually selected, read from its final runs.
         chosen = f[(f["tags.model"] == model) & (f["tags.feature_set"] == fs)]["params.loss"]
-        cells.append(", ".join(sorted(set(chosen))) or "-")
+        cells.append(", ".join(sorted(LOSS_NAMES[x] for x in set(chosen))) or "-")
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
@@ -241,5 +243,18 @@ def pair_interval_table(rows: list[tuple[str, str, dict[str, float]]], k: int) -
             f"[{_signed(r['precision_at_k_lo'])}, {_signed(r['precision_at_k_hi'])}]",
             f"{r['share_positive']:.0%}",
         ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def per_step_table(series: dict[str, list[pd.DataFrame]]) -> str:
+    """The per-step figure's numbers: illicit F1 per test step, mean over seeds."""
+    first = next(iter(series.values()))[0]
+    header = ["Step", "Illicit", *series]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    means = {k: pd.concat([t["f1"] for t in v], axis=1).mean(axis=1) for k, v in series.items()}
+    for step in first.index:
+        cells = [str(step), str(int(first.loc[step, "n_illicit"]))]
+        cells += [f"{means[k].loc[step]:.3f}" for k in series]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)

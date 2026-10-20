@@ -32,6 +32,7 @@ from fraudgraph.evaluation.report import (
     loss_table,
     model_label,
     pair_interval_table,
+    per_step_table,
     replace_between_markers,
     results_tables,
 )
@@ -184,6 +185,8 @@ def phase4_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict
         f"Best GNN by validation PR-AUC: {chosen}.\n\n"
         + pair_interval_table(rows, k)
         + "\n\n![Illicit F1 per test step](docs/figures/per_step_f1.png)"
+        + "\n\n<details><summary>The figure's numbers (illicit F1 per test step, mean over "
+        "seeds)</summary>\n\n" + per_step_table(series) + "\n\n</details>"
     )
 
 
