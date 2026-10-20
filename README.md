@@ -7,7 +7,7 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 3 (Neo4j graph features). Results, plots and a live demo will appear here as the
+> Status: Phase 4 (GNNs and hybrid). Results, plots and a live demo will appear here as the
 > project progresses. Every number in this README will be generated from logged
 > experiment runs, not typed by hand.
 
@@ -216,3 +216,33 @@ Reproduce with `docker compose up -d neo4j`, `uv run python scripts/load_neo4j.p
 `uv run python scripts/build_graph_features.py` (or `--backend networkx` without Neo4j),
 then `uv run python scripts/run_experiment.py --config graph_features` and
 `uv run python scripts/make_results_table.py`.
+
+### Phase 4: GNNs and hybrid
+
+GCN and GraphSAGE (two message-passing layers each, PyTorch Geometric) on feature sets (a)
+and (b), and a hybrid: XGBoost on the same features plus the embeddings of the better GNN
+(chosen on validation). Everything goes through the same protocol as Phases 2 and 3: an
+8-setting grid per model, 3 seeds, selection and thresholds on validation, one test score
+per kept model ([D-014](docs/decisions.md), [D-027](docs/decisions.md)).
+
+- **Graph.** Edges in both directions; unknown-label transactions are in the graph but not
+  in the loss or the metrics. Each period is its own subgraph, because no edge crosses
+  periods ([D-026](docs/decisions.md)).
+- **Checkpoint.** The kept model is the epoch with the best validation PR-AUC, not the
+  last epoch ([D-027](docs/decisions.md)).
+- **Imbalance.** Class-weighted cross-entropy and focal loss are both in the grid and
+  compared on validation only ([D-029](docs/decisions.md)).
+- **Hybrid caveat.** The embeddings of training transactions come from a GNN trained on
+  their labels, so they are cleaner than those of test transactions. That can only hurt
+  the hybrid's test score; the train vs validation PR-AUC of each GNN is shown so the gap
+  is visible ([D-028](docs/decisions.md)).
+- **Reproducible.** GNNs train on CPU with deterministic algorithms, so a refit
+  reproduces its validation score exactly, as the protocol checks
+  ([D-025](docs/decisions.md)).
+
+<!-- results-phase4:start -->
+<!-- results-phase4:end -->
+
+Reproduce with `uv run python scripts/run_experiment.py --config gnn`, then
+`--config hybrid` (a separate process: torch and XGBoost cannot share one,
+[D-030](docs/decisions.md)), then `uv run python scripts/make_results_table.py`.
