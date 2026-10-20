@@ -93,3 +93,18 @@ def test_nondeterministic_model_is_rejected(setup):
 
     with pytest.raises(NonDeterministicError):
         run_protocol(fit, {"q": [1]}, [0], y, steps, split, cfg, tags={})
+
+
+def test_on_final_runs_once_per_seed_inside_the_final_run(setup):
+    y, steps, split, cfg = setup
+    seen = []
+
+    def on_final(scorer, seed):
+        run = mlflow.active_run()
+        seen.append((seed, run.data.tags["role"], callable(scorer)))
+
+    fit = make_fake_fit(y, split, [])
+    run_protocol(
+        fit, {"quality": [0.0, 1.0]}, [0, 1], y, steps, split, cfg, tags={}, on_final=on_final
+    )
+    assert seen == [(0, "final", True), (1, "final", True)]
