@@ -29,6 +29,7 @@ class Stage1Result:
     risk: np.ndarray  # predicted illicit probability, one per node, aligned with nodes
     node_model: np.ndarray  # index into model_steps of the model that scored each node
     model_steps: list[frozenset[int]]  # time steps each model was trained on
+    models: list  # the fitted models, same order; the last is the full-training-period one
 
 
 def oof_risk(
@@ -53,6 +54,7 @@ def oof_risk(
     risk = np.full(len(y), np.nan)
     node_model = np.full(len(y), -1)
     model_steps: list[frozenset[int]] = []
+    models: list = []
 
     def fit_and_score(fit_steps: np.ndarray, score_mask: np.ndarray) -> None:
         fit_mask = labelled & np.isin(steps, fit_steps)  # unknowns are never trained on
@@ -61,6 +63,7 @@ def oof_risk(
         risk[score_mask] = model.predict_proba(X[score_mask])[:, 1]
         node_model[score_mask] = len(model_steps)
         model_steps.append(frozenset(int(s) for s in np.unique(steps[fit_mask])))
+        models.append(model)
 
     # Folds are formed over the training steps themselves, one group per step, so a
     # step is never split between training and held-out.
@@ -71,7 +74,7 @@ def oof_risk(
 
     # Validation and test: the model trained on the whole training period.
     fit_and_score(train_step_ids, ~in_train)
-    return Stage1Result(risk=risk, node_model=node_model, model_steps=model_steps)
+    return Stage1Result(risk=risk, node_model=node_model, model_steps=model_steps, models=models)
 
 
 def fit_stage1(

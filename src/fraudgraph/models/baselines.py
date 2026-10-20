@@ -90,7 +90,12 @@ def run_baselines(
         for name in models or list(cfg["models"]):
             mcfg = cfg["models"][name]
             seeds = cfg["seeds"][:1] if mcfg.get("deterministic") else cfg["seeds"]
-            tags = {"phase": "2", "model": name, "feature_set": fs, "run_group": run_group}
+            tags = {
+                "phase": str(cfg.get("phase", "2")),
+                "model": name,
+                "feature_set": fs,
+                "run_group": run_group,
+            }
             results[(name, fs)] = run_protocol(
                 tabular_fit_fn(name, X, y, split),
                 mcfg["grid"],
