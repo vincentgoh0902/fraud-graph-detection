@@ -1,0 +1,11 @@
+# Phase 4 hybrid: XGBoost on tabular features + GNN embeddings. Seeds, evaluation and the
+# XGBoost grid come from baselines.yaml, so the budget matches Phase 2 and 3 (D-014).
+base: baselines
+experiment: hybrid
+phase: "4"
+runner: hybrid
+feature_sets: [local+emb, all+emb]   # (a) / (b) + embeddings of a GNN on the same features
+models: [xgboost]
+# Embeddings come from the latest final runs of this experiment; for each feature set, the
+# GNN with the better mean validation PR-AUC supplies them (D-028).
+embeddings_from: gnn
