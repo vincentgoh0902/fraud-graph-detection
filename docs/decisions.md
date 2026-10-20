@@ -224,11 +224,18 @@ of one time step never depend on another.
 **No labels in Neo4j.** Only `tx_id`, `time_step` and edges are loaded, so no graph
 algorithm can see a label.
 
-## D-020: Louvain runs single-threaded
+## D-020: Louvain runs single-threaded, on a single-threaded projection
 GDS Louvain can return different communities between runs when it uses several threads.
-It runs with `concurrency: 1` so the features are reproducible; the integration test runs
-it twice and compares. The NetworkX fallback uses a fixed seed. The two implementations
-are not expected to find identical communities, so they are compared only loosely.
+**Finding.** `concurrency: 1` on Louvain alone was not enough: three runs on the real graph
+gave 265–280 communities, with an adjusted Rand index (ARI, 1 = identical partition) of
+0.96–0.98 between runs. The in-memory projection was loaded in parallel, which assigns
+internal node ids in a different order each time, and Louvain's result depends on node
+order. With the projection also loaded single-threaded (`readConcurrency: 1`), three runs
+gave identical partitions (ARI 1.0, 283 communities each).
+**Decision.** Both settings are used; the integration test runs the GDS features twice and
+requires ARI 1.0. The NetworkX fallback uses a fixed seed. The two implementations are not
+expected to find identical communities (on the real graph: 283 vs 319, ARI ≈ 0.94), so
+they are compared only loosely.
 
 ## D-021: Structure-only ablation
 **Decision.** Besides (c) = local + all graph features and (b) + graph, run local +

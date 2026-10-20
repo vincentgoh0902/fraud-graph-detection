@@ -35,9 +35,7 @@ def pagerank(
     # Safe divide: nodes with no outgoing edges give nothing.
     inv_out = np.divide(1.0, out_degree, out=np.zeros(n), where=out_degree > 0)
     for _ in range(max_iterations):
-        new = (1 - damping) + damping * np.bincount(
-            dst, weights=(rank * inv_out)[src], minlength=n
-        )
+        new = (1 - damping) + damping * np.bincount(dst, weights=(rank * inv_out)[src], minlength=n)
         # GDS stops when every node changes by less than the tolerance.
         done = np.abs(new - rank).max() < tolerance
         rank = new

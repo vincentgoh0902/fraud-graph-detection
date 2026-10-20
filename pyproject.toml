@@ -47,3 +47,8 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint.isort]
+# The repo's neo4j/ folder (database volumes) would otherwise make ruff treat the
+# neo4j driver as first-party.
+known-third-party = ["neo4j"]
