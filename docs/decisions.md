@@ -259,3 +259,20 @@ re-run with graph features. (Decided by the project owner when approving the Pha
   is the comparison that carries forward.
 **Cost.** We cannot say whether random forest would gain more or less from graph features
 than XGBoost. If that question matters later, it can be run with the same config.
+
+## D-023: Finding — Louvain communities are nearly whole time steps
+**Evidence (training steps 1–34, GDS Louvain).** Louvain finds a median of 5 communities
+per step (1 to 20), and the largest covers 81% of its step on average (50% to 100%). The
+34 training steps contain 148 distinct community sizes. NetworkX's Louvain finds a similar
+partition (D-020), so this is a property of the graph, not of one implementation: each
+step is one connected component, sparse and dominated by hub transactions.
+**What it means.** The community features describe the time step more than a local group:
+`community_size` is close to a step identifier, and `community_risk_mean` is close to
+the step's mean predicted risk. That is the concern behind D-013 (patterns tied to
+specific past steps do not transfer). It is not leakage, because both are computed from
+that step's own transactions and stage-1 predictions, which exist at prediction time.
+**Decision.** Keep the features as planned and approved, and report this with the results.
+The structure-only ablation (D-021) and Phase 5's SHAP analysis show whether the model
+leans on them. If a later phase replaces them (for example with a higher Louvain
+resolution, or with smaller neighbourhoods such as k-hop counts), it gets a new entry and
+the change is chosen on validation only.
