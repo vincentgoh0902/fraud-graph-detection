@@ -1,0 +1,33 @@
+# Phase 2: tabular baselines. See docs/decisions.md D-014 for the tuning budget.
+experiment: baselines
+feature_sets: [local, all]
+seeds: [0, 1, 2]
+
+evaluation:
+  k: 20                   # primary precision@K / recall@K (D-004)
+  extra_ks: [10, 50, 100] # robustness check
+  fn_cost: 10             # a missed illicit transaction costs 10x a false alarm (brief, section 4)
+  fp_cost: 1
+  n_bootstrap: 1000       # validation threshold/F1 interval (D-005)
+
+# Each grid is the full search; every combination runs with every seed and is
+# selected by mean validation PR-AUC. Simpler settings are listed first because
+# exact ties keep the earlier one.
+models:
+  logreg:
+    deterministic: true   # lbfgs: same result for any seed, so one run (D-006)
+    grid:
+      C: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]   # inverse regularisation strength (D-014)
+  random_forest:
+    grid:
+      n_estimators: [300]
+      max_depth: [null, 20]       # null = grow until leaves are pure
+      min_samples_leaf: [1, 5]
+      max_features: [sqrt, 0.3]   # features tried per split
+  xgboost:
+    grid:
+      n_estimators: [300, 600]
+      max_depth: [4, 6]
+      learning_rate: [0.05, 0.1]
+      subsample: [0.8]
+      colsample_bytree: [0.5]
