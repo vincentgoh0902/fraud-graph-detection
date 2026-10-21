@@ -1,7 +1,7 @@
 """What the API and the dashboard serve, independent of HTTP (brief section 6).
 
 Every method returns plain JSON-ready dicts, so the FastAPI app and the dashboard's
-in-process client (the Space) show exactly the same thing.
+in-process client (the public demo) show exactly the same thing.
 """
 
 import math
@@ -24,7 +24,7 @@ class InvalidRequest(ValueError):
 
 
 class Unavailable(RuntimeError):
-    """A query this export cannot answer: the Space ships only part of the graph (D-040)."""
+    """A query this export cannot answer: the public demo ships only part of the graph (D-040)."""
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class ServingService:
 
     @property
     def _max_hops(self) -> int:
-        # The Space ships complete neighbourhoods only up to its export's hops (D-040).
+        # The public demo ships complete neighbourhoods only up to its export's hops (D-040).
         return min(self.limits.max_hops, int(self.data.meta.get("max_hops", self.limits.max_hops)))
 
     def _row(self, tx_id: int) -> pd.Series:

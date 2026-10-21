@@ -4,21 +4,31 @@ Run:
     API_URL=http://localhost:8000 uv run streamlit run dashboard/app.py   # via the API
     uv run streamlit run dashboard/app.py                                 # in-process
 
-With API_URL set it calls the API (docker compose, graph queries in Neo4j). Without it,
-it reads exported files in-process (ARTIFACTS_DIR, default artifacts/space): that is the
-Hugging Face Space, which has no Neo4j (D-008).
+Where the data comes from, first match wins:
+- API_URL: call the API (docker compose; graph queries in Neo4j).
+- DEMO_DATASET_REPO (+ DEMO_DATASET_REVISION): download the demo subset from a public
+  Hugging Face dataset repo and serve it in-process. This is the public demo on Streamlit
+  Community Cloud, which has no Neo4j (D-008, D-042).
+- ARTIFACTS_DIR (default artifacts/space): exported files on disk, in-process.
 """
 
 import os
+import sys
+from pathlib import Path
 
-import pandas as pd
-import streamlit as st
-import streamlit.components.v1 as components
-import views
+# Streamlit Community Cloud runs this file from a plain checkout without installing the
+# package, so make src/ importable. A no-op where fraudgraph is installed.
+SRC = Path(__file__).resolve().parents[1] / "src"
+if SRC.is_dir() and str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-from fraudgraph.config import load_config, resolve
-from fraudgraph.serving.client import ApiClient, LocalClient
-from fraudgraph.serving.service import NotFound, Unavailable
+import pandas as pd  # noqa: E402
+import streamlit as st  # noqa: E402
+import views  # noqa: E402
+
+from fraudgraph.config import load_config, resolve  # noqa: E402
+from fraudgraph.serving.client import ApiClient, LocalClient  # noqa: E402
+from fraudgraph.serving.service import NotFound, Unavailable  # noqa: E402
 
 REPO = "https://github.com/vincentgoh0902/fraud-graph-detection"
 COLUMNS = {
@@ -46,7 +56,14 @@ def get_client():
     from fraudgraph.serving.service import Limits, ServingService
 
     cfg = load_config("serving")
-    data = load_artifacts(resolve(os.environ.get("ARTIFACTS_DIR", cfg["demo"]["output_dir"])))
+    repo = os.environ.get("DEMO_DATASET_REPO")
+    if repo:
+        from fraudgraph.serving.hub import download_demo
+
+        folder = download_demo(repo, os.environ.get("DEMO_DATASET_REVISION") or None)
+    else:
+        folder = resolve(os.environ.get("ARTIFACTS_DIR", cfg["demo"]["output_dir"]))
+    data = load_artifacts(folder)
     store = InMemoryStore(data.edges, data.transactions)
     return LocalClient(ServingService(data, store, Limits(**cfg["limits"])))
 
@@ -92,7 +109,7 @@ def start_page(client, meta: dict) -> None:
     steps = client.steps()["steps"]
     by_step = {s["time_step"]: s for s in steps}
     st.subheader("How well the model catches illicit transactions, step by step")
-    st.altair_chart(views.f1_chart(steps), use_container_width=True)
+    st.altair_chart(views.f1_chart(steps), width="stretch")
     st.caption(
         "Illicit-class F1 at the validation threshold, from the logged test metrics. "
         "After the dark-market shutdown at step 43 the model misses almost every illicit "
@@ -129,7 +146,7 @@ def start_page(client, meta: dict) -> None:
         st.button(f"Open step {after_step}'s queue", on_click=go, args=("Alert queue",),
                   kwargs={"step": after_step}, key="tour_after")  # fmt: skip
     with st.expander("Per-step numbers (table)"):
-        st.dataframe(pd.DataFrame(steps), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(steps), hide_index=True, width="stretch")
 
 
 def alerts_page(client, meta: dict) -> None:
@@ -152,7 +169,7 @@ def alerts_page(client, meta: dict) -> None:
     event = st.dataframe(
         df[["rank", "tx_id", "risk_score", "flagged", "label"]],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         on_select="rerun",
         selection_mode="single-row",
         column_config={"risk_score": st.column_config.NumberColumn("risk score", format="%.4f"),
@@ -186,7 +203,7 @@ def transaction_page(client, meta: dict) -> None:
     left, right = st.columns([2, 3])
     with left:
         st.subheader("Why this score")
-        st.altair_chart(views.shap_chart(tx), use_container_width=True)
+        st.altair_chart(views.shap_chart(tx), width="stretch")
         st.caption(
             f"The {len(tx['top_features'])} largest SHAP contributions, in log-odds. The "
             f"model starts from {tx['base_value']:+.2f} and adds every feature's contribution; "
@@ -210,12 +227,13 @@ def transaction_page(client, meta: dict) -> None:
                 f"Showing the nearest {len(nb['nodes'])} transactions, riskiest first within "
                 "each hop; the full neighbourhood is larger."
             )
-        components.html(views.network_html(nb), height=580)
+        # Our own HTML (pyvis, from served IDs and scores), never user input.
+        st.iframe(views.network_html(nb), height=580)
         st.markdown(views.risk_legend_html(), unsafe_allow_html=True)
         with st.expander("Neighbourhood (table)"):
             nodes = pd.DataFrame(nb["nodes"])
             nodes["label"] = nodes["label"].map(label_text)
-            st.dataframe(nodes, hide_index=True, use_container_width=True)
+            st.dataframe(nodes, hide_index=True, width="stretch")
 
     if meta["has_full_graph"]:
         st.subheader("Paths to another transaction")
@@ -239,7 +257,7 @@ def patterns_page(client, meta: dict) -> None:
                         index=in_range(meta, st.session_state.get("step", 40)) - first)  # fmt: skip
     st.subheader("Communities with the most flagged transactions")
     comm = client.communities(step, 5, 10)["items"]
-    st.dataframe(pd.DataFrame(comm), hide_index=True, use_container_width=True,
+    st.dataframe(pd.DataFrame(comm), hide_index=True, width="stretch",
                  column_config=COLUMNS)  # fmt: skip
     st.caption(
         "Louvain communities. On this data they are close to whole steps (the largest holds "
@@ -255,7 +273,7 @@ def patterns_page(client, meta: dict) -> None:
     if fan:
         df = pd.DataFrame(fan)
         df["label"] = df["label"].map(label_text)
-        st.dataframe(df, hide_index=True, use_container_width=True, column_config=COLUMNS)
+        st.dataframe(df, hide_index=True, width="stretch", column_config=COLUMNS)
     else:
         st.write("No transaction in this step is paid by two or more flagged transactions.")
 

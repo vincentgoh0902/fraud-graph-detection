@@ -669,12 +669,21 @@ files for the demo and for CI. A test checks that both give identical answers on
 <!-- latency:end -->
 
 Memory in use after start-up, measured with `docker stats` on the Mac: Neo4j about 2.1 GB,
-API about 300 MB, dashboard about 50 MB. The Space runs the dashboard with its data in-process and peaks at about 300 MB.
+API about 300 MB, dashboard about 50 MB. The public demo runs the dashboard with its data in-process and peaks at about 300 MB.
 
-**Live demo (not yet published).** A Hugging Face Space build runs the dashboard
-in-process on a subset: scores and
-SHAP values for steps 35–49, and payment edges only around each step's top 20 alerts. It has
-no features, no labels and no full edge list ([D-012](docs/decisions.md),
+**Live demo.** The dashboard runs on Streamlit Community Cloud, in-process on a subset: scores
+and SHAP values for steps 35–49, and payment edges only around each step's top 20 alerts. It
+has no features, no labels and no full edge list ([D-012](docs/decisions.md),
 [D-040](docs/decisions.md)). Paths and fan-in need the whole graph, so they are full-stack
-only. Build it locally with `uv run python scripts/build_space.py`, then
-`docker build -t fraud-graph-space build/space`.
+only. The subset lives in the public dataset repo
+[vincentgoh-kaiswee/fraud-graph-detection-demo](https://huggingface.co/datasets/vincentgoh-kaiswee/fraud-graph-detection-demo),
+with its licence and attribution ([D-042](docs/decisions.md)).
+
+To redeploy: `uv run python scripts/publish_demo_data.py --repo <user>/<name>` uploads the
+subset and prints a commit hash. The Streamlit app (entrypoint `dashboard/app.py`, Python
+3.12) installs `dashboard/requirements.txt` and needs two secrets:
+
+```toml
+DEMO_DATASET_REPO = "vincentgoh-kaiswee/fraud-graph-detection-demo"
+DEMO_DATASET_REVISION = "<commit hash printed by the publish script>"
+```

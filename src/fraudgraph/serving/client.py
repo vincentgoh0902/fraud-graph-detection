@@ -1,4 +1,4 @@
-"""The dashboard's view of the service: over HTTP (docker compose) or in-process (the Space).
+"""The dashboard's view of the service: over HTTP (docker compose) or in-process (the public demo).
 
 Both return the same JSON-shaped dicts and raise the same errors, so the dashboard does not
 care which one it has (tests/test_api.py checks they agree).

@@ -1,7 +1,7 @@
 """Investigation queries behind one interface, with two stores (D-008, D-040).
 
 - Neo4jStore runs them as Cypher against the full graph (docker compose).
-- InMemoryStore runs them with NetworkX and pandas on the exported files (the Space, CI).
+- InMemoryStore runs them with NetworkX and pandas on the exported files (the public demo, CI).
 
 The rules that decide an answer (breadth-first hop distances, truncation order, path
 sorting) live here once, outside both stores, so the two cannot disagree on them.

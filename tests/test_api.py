@@ -86,7 +86,7 @@ def test_demo_without_labels(service):
 
 def test_api_and_local_clients_agree(service):
     # The dashboard talks to the API in docker compose and to the service directly in the
-    # Space; both must show the same thing.
+    # public demo; both must show the same thing.
     http = TestClient(create_app(service))
     api, local = ApiClient("", get=http.get), LocalClient(service)
     for name, args in [

@@ -43,3 +43,6 @@ node_modules/
 
 # Assembled Hugging Face Space folder (scripts/build_space.py)
 /build/
+
+# Streamlit secrets (Community Cloud reads them from its UI)
+.streamlit/secrets.toml

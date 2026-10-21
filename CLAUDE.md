@@ -7,8 +7,9 @@ and does the improvement hold over time?
 - Spec: `PROJECT_BRIEF.md` (authoritative for scope, evaluation protocol, phases)
 - Design decisions and their justification: `docs/decisions.md`
 - Scope: Elliptic only. The IBM AML and Elliptic++ extensions are out of scope (D-007).
-- Visibility: public GitHub repo. Live demo target: Hugging Face Spaces (static
-  precomputed artefacts, no Neo4j). Full stack runs locally via docker compose.
+- Visibility: public GitHub repo. Live demo: Streamlit Community Cloud running
+  `dashboard/app.py` in-process, data from the public HF dataset repo
+  `vincentgoh-kaiswee/fraud-graph-detection-demo` (D-042; no Neo4j). Full stack runs locally via docker compose.
   Not hosted publicly on the homelab (D-008).
 
 ## Stack
@@ -19,8 +20,8 @@ Neo4j 5 Community + GDS plugin, MLflow (local store), FastAPI, Streamlit, pytest
 - API: `PORT` env var, default 8000. Dashboard: `PORT`, default 8501.
 - Neo4j: 7474 (browser) / 7687 (bolt), local compose only, bound to 127.0.0.1.
 - Memory (measured in Phase 6, `docker stats`): Neo4j ~2.1 GB, API ~300 MB, dashboard
-  ~50 MB calling the API; the in-process Space mode needs ~300 MB once its data is loaded. Host ports overridable via API_HOST_PORT /
-  DASHBOARD_HOST_PORT. Space container: port 7860.
+  ~50 MB calling the API; the in-process demo needs ~300 MB once its data is loaded. Host ports overridable via API_HOST_PORT /
+  DASHBOARD_HOST_PORT.
 - Serving images are torch-free: embeddings, scores and SHAP values are precomputed offline.
 
 ## Commands

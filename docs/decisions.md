@@ -570,3 +570,21 @@ SciPy, MLflow, Matplotlib) moves to an `ml` group, and the API and dashboard get
 groups. Local `uv sync` still installs everything; the images install only their group.
 **Why.** The images stay small and torch- and XGBoost-free. A test imports the API and
 dashboard code in a fresh process and fails if any training library gets loaded.
+
+## D-042: Public demo on Streamlit Community Cloud, data from a Hugging Face dataset repo
+**Context.** Docker Spaces on Hugging Face now need a paid PRO account, so the planned Space
+(D-008) is replaced.
+**Decision.** The dashboard runs in-process on Streamlit Community Cloud. At start-up it
+downloads the demo subset (D-040) from the public dataset repo
+`vincentgoh-kaiswee/fraud-graph-detection-demo`, pinned to a commit hash
+(`DEMO_DATASET_REVISION`). The dataset card carries the CC BY-NC-ND 4.0 licence and the
+attribution. Cloud installs `dashboard/requirements.txt`, generated from `uv.lock` and
+checked by a test, so the demo runs the same versions as the tests.
+**Why.**
+- Data stays out of git (D-012); the dataset repo is the one place the public subset lives,
+  with its licence next to it.
+- Pinning the revision keeps the app serving the files it was checked against, even if the
+  dataset repo changes.
+- `scripts/publish_demo_data.py` refuses to upload anything but the label-free demo export.
+**Cost.** The app downloads 5.5 MB on a cold start, and Community Cloud sleeps idle apps, so
+the first visit after a quiet spell is slow.
