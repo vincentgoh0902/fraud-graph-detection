@@ -187,7 +187,10 @@ fraud-graph-detection/
   comparing XGBoost and GNNs (GCN, GraphSAGE); [best model] achieved [X] PR-AUC vs [Y]
   for a tabular baseline
 - Engineered graph features with Neo4j Graph Data Science (PageRank, Louvain
-  communities, neighbour risk), improving illicit-class F1 from [A] to [B]
+  communities, leakage-free neighbour risk) and showed with paired bootstrap intervals
+  that neither they nor GNNs improved on tabular XGBoost (PR-AUC change [A], 95%
+  interval [B]); traced the post-shutdown failure to new illicit transactions that look
+  licit in both their own features and their neighbourhoods
 - Diagnosed a [Z]% drop in recall after a dark market shutdown through per-time-step
   analysis, and served risk scores and investigator subgraph queries via FastAPI,
   Neo4j and Streamlit (p95 latency [N] ms)
