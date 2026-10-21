@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fraud graph investigator</title>
+  <meta name="description" content="Illicit-transaction detection on the Elliptic Bitcoin dataset: an alert queue, SHAP explanations and payment graphs, and where the model stops working.">
+  <meta name="color-scheme" content="light">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header>
+    <a class="brand" href="#/">Fraud graph investigator</a>
+    <nav aria-label="Views">
+      <a href="#/" data-route="">Start here</a>
+      <a href="#/alerts/40" data-route="alerts">Alert queue</a>
+      <a href="#/tx/" data-route="tx">Transaction</a>
+      <a href="#/patterns/40" data-route="patterns">Patterns</a>
+    </nav>
+  </header>
+  <main id="main" tabindex="-1" aria-busy="true">
+    <p class="note">Loading…</p>
+    <noscript><p>This demo needs JavaScript. The code and results are on
+      <a href="https://github.com/vincentgoh0902/fraud-graph-detection">GitHub</a>.</p></noscript>
+  </main>
+  <footer>
+    <section>
+      <h2>About this demo</h2>
+      <p>Static, no backend: every number was generated at build time by the same serving code as
+        the project's dashboard, and a test checks they match. Model <code id="model">…</code>.</p>
+      <p>The full stack, with Neo4j and a FastAPI service, runs locally:
+        <a href="https://github.com/vincentgoh0902/fraud-graph-detection#serving-phase-6">Serving</a>.
+        Code, method and results:
+        <a href="https://github.com/vincentgoh0902/fraud-graph-detection">GitHub repository and README</a>.</p>
+    </section>
+    <section>
+      <h2>Data, licence and attribution</h2>
+      <p>Source: the <a href="https://www.kaggle.com/datasets/ellipticco/elliptic-data-set">Elliptic Data Set</a>
+        by Elliptic, licensed <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a>;
+        this demo is non-commercial. Transaction IDs, time steps and payment edges are unmodified excerpts.
+        Risk scores, flags, communities and SHAP values are this project's model outputs. Not included:
+        transaction features, labels and the full edge list. Per-step metrics are aggregates from the
+        project's logged test results. Data: <a id="dataset" href="https://huggingface.co/datasets/vincentgoh-kaiswee/fraud-graph-detection-demo">Hugging Face dataset</a>.</p>
+      <p>M. Weber et al., “Anti-Money Laundering in Bitcoin: Experimenting with Graph Convolutional
+        Networks for Financial Forensics”, KDD ’19 Workshop on Anomaly Detection in Finance, 2019.</p>
+    </section>
+  </footer>
+</body>
+</html>
