@@ -7,9 +7,10 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 5 (analysis) done; [Findings](#findings-phase-5) below. Serving and a live
-> demo come in Phase 6. Every table and figure in this README is generated from logged
-> MLflow runs by `scripts/make_results_table.py`, not typed by hand.
+> Status: Phase 6 (serving) done: [Findings](#findings-phase-5) and the
+> [investigator dashboard](#serving-phase-6) below. Every results table and figure in this
+> README is generated from logged MLflow runs by `scripts/make_results_table.py`, not typed
+> by hand.
 
 ## In short
 
@@ -36,8 +37,8 @@ is in [`docs/decisions.md`](docs/decisions.md).
 - **Models:** logistic regression, random forest, XGBoost, GCN, GraphSAGE, and a
   hybrid (GNN embeddings + XGBoost).
 - **Graph features and investigation:** Neo4j Graph Data Science (PageRank,
-  Louvain communities, neighbour risk); Cypher queries for an investigator
-  dashboard come in Phase 6.
+  Louvain communities, neighbour risk), and Cypher queries behind an investigator
+  dashboard (Phase 6).
 
 Design decisions and their reasoning are recorded in [`docs/decisions.md`](docs/decisions.md).
 
@@ -597,3 +598,83 @@ Would another model have caught XGBoost's misses? (each at its own validation th
 
 Reproduce with `uv run python scripts/run_analysis.py` (needs the Phase 2–4 runs and the
 graph feature table), then `uv run python scripts/make_results_table.py`.
+
+## Serving (Phase 6)
+
+![Investigator dashboard: a flagged transaction's SHAP explanation and its 2-hop payment neighbourhood](docs/figures/dashboard.jpg)
+
+An investigator's view of the served model (seed 0 of XGBoost on (b) + graph, the model
+selected on validation, [D-039](docs/decisions.md)) for the out-of-sample steps 35–49. It
+has an alert queue per step, a SHAP explanation per transaction, the payment neighbourhood
+coloured by risk, and the Cypher investigation queries. The dashboard opens on a short
+guided tour: one strong alert before the shutdown, then the steps after it, where the model
+misses almost everything.
+
+```
+offline (uv, Mac)                          docker compose up (all ports on 127.0.0.1)
+scripts/export_serving.py ─► artifacts/ ─► api (FastAPI) ─► Neo4j: Cypher queries
+  scores + SHAP, checked against MLflow        ▲
+scripts/write_predictions.py ─► Neo4j          dashboard (Streamlit)
+```
+
+**Why scores are precomputed, not computed at startup** ([D-038](docs/decisions.md)). The
+brief says to load the models and score at startup. Elliptic is historical, so the
+transactions and the model are fixed and the scores never change. An offline export computes
+them once and checks that they equal the test scores logged in MLflow, so the app shows
+exactly the model this README reports. The serving images then need neither XGBoost nor the
+feature table. The API, Neo4j and the public demo all serve the same file. The cost is that
+the app cannot score a new, unseen transaction, which this fixed benchmark does not need.
+
+**Run it**
+
+```bash
+uv run python scripts/export_serving.py       # scores + SHAP for steps 35-49, checked vs MLflow
+docker compose up -d neo4j
+uv run python scripts/load_neo4j.py           # once: transactions and payment edges
+uv run python scripts/write_predictions.py    # risk_score, predicted_label, model_version, community_id
+docker compose up -d --build api dashboard    # API on :8000, dashboard on :8501
+```
+
+Set `API_HOST_PORT` or `DASHBOARD_HOST_PORT` in `.env` if 8000 or 8501 is taken on your machine.
+
+**Endpoints** (OpenAPI docs at `/docs`)
+
+| Endpoint | Returns |
+|---|---|
+| `GET /transactions/{tx_id}` | risk score, flag at the validation threshold, label, top 10 SHAP contributions |
+| `GET /transactions/{tx_id}/neighbourhood?hops=2` | the subgraph up to 3 hops, risk per node, at most 500 nodes (nearest hops first, then riskiest) |
+| `GET /alerts?time_step=40&k=20` | the k riskiest transactions of a step (k ≤ 100) |
+| `GET /paths?source=…&target=…` | all shortest payment paths up to 6 hops |
+| `GET /communities?time_step=40` | Louvain communities ranked by their share of flagged transactions |
+| `GET /fan-in?time_step=40` | transactions paid by several flagged transactions |
+| `GET /steps`, `/meta`, `/health` | per-step summary, model version and limits, liveness |
+
+The same queries run on two interchangeable backends ([D-008](docs/decisions.md),
+[D-040](docs/decisions.md)): Cypher in Neo4j for the full stack, and NetworkX on the exported
+files for the demo and for CI. A test checks that both give identical answers on the real graph.
+
+**Latency** (from `scripts/measure_latency.py`, logged to MLflow)
+
+<!-- latency:start -->
+| Endpoint | Neo4j (full stack) p50 / p95 (ms) | in-memory p50 / p95 (ms) |
+|---|---|---|
+| transaction | 2.8 / 3.2 | 3.1 / 4.4 |
+| neighbourhood (2 hops) | 7.8 / 20.9 | 5.0 / 8.6 |
+| alerts (k = 20) | 3.6 / 4.7 | 3.6 / 4.9 |
+| communities | 7.9 / 14.7 | 5.1 / 6.2 |
+| fan-in | 8.0 / 12.7 | 4.5 / 6.7 |
+| paths | 3.3 / 4.5 | 3.0 / 11.5 |
+
+100 requests per endpoint after 10 warm-up requests; one sequential requests.Session, same machine; `macOS-15.7.7-arm64-arm-64bit`. Model `xgboost-all+graph-seed0-20261020-173637`.
+<!-- latency:end -->
+
+Memory in use after start-up, measured with `docker stats` on the Mac: Neo4j about 2.1 GB,
+API about 300 MB, dashboard about 50 MB. The Space runs the dashboard with its data in-process and peaks at about 300 MB.
+
+**Live demo (not yet published).** A Hugging Face Space build runs the dashboard
+in-process on a subset: scores and
+SHAP values for steps 35–49, and payment edges only around each step's top 20 alerts. It has
+no features, no labels and no full edge list ([D-012](docs/decisions.md),
+[D-040](docs/decisions.md)). Paths and fan-in need the whole graph, so they are full-stack
+only. Build it locally with `uv run python scripts/build_space.py`, then
+`docker build -t fraud-graph-space build/space`.

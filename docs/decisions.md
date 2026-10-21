@@ -516,3 +516,57 @@ cannot be named.
 **Also seen.** Neighbour and community risk features drift on validation already (median PSI
 0.46). That fits the known limitation of D-001 (out-of-fold stage-1 scores for training nodes,
 the full stage-1 model for later nodes), but this analysis cannot separate it from real change.
+
+## D-038: Serving reads precomputed scores and SHAP; it does not score at startup
+**Brief.** Section 6 says "load models and precompute scores at startup".
+**Decision.** An offline export (`scripts/export_serving.py`) computes each test-period
+transaction's risk score, predicted label and top SHAP contributions once, and writes them
+to `artifacts/serving/`. The API and dashboard only read those files.
+**Why.**
+- Elliptic is historical: the transactions and the model are fixed, so the scores never
+  change. Scoring at every startup recomputes the same numbers.
+- The serving images then need neither XGBoost nor the feature table. They stay small,
+  and the feature table never has to sit next to a public demo (D-012).
+- The API, the Neo4j properties and the Hugging Face Space serve the same file, so they
+  cannot drift apart.
+- The export asserts that its scores equal the test scores logged in MLflow for the served
+  run, so the app shows exactly the model the README reports.
+**Cost.** Scoring a new, unseen transaction is not supported. That would need the feature
+pipeline at serving time, including stage-1 neighbour risk (D-001). It is out of scope for a
+fixed benchmark.
+
+## D-039: Serve seed 0 of the validation-selected model
+**Decision.** The served model is seed 0 of XGBoost on (b) + graph, the model Phase 5
+selected on validation (D-033), with its own validation max-F1 threshold. It is read from
+the latest analysis run, which saved the checked refit (D-034).
+**Why.** Seed 0 is a reported, evaluated model. An average of the three seeds would be a
+new model with its own threshold that no protocol run evaluated.
+
+## D-040: Serving scope, query limits and the Space subset
+**Scope.** Only the out-of-sample period, steps 35–49, is served. Scores for training steps
+would be in-sample and look better than they are.
+**Limits.** Neighbourhoods up to 3 hops and 500 nodes, alerts up to k = 100, shortest
+paths up to length 6. A busy transaction has 473 direct neighbours, so an uncapped 3-hop
+query could return thousands of nodes. When a neighbourhood is cut, nearer hops are kept
+first and, within a hop, higher risk first, and the response says it was truncated.
+Both graph backends (Neo4j and in-memory, D-008) apply the same truncation in shared code,
+so they return the same answer.
+**Space subset (D-012).** The public demo ships scores and SHAP values for the test-period
+transactions, and edges only inside the 2-hop neighbourhoods of each step's top-20 alerts.
+It ships no feature table and no full edge list. Paths and fan-in need the whole graph, so
+the demo offers them only in the full stack.
+**Licence check (before publishing).** Kaggle's metadata for the dataset gives CC BY-NC-ND
+4.0, as recorded in D-012. That licence lets anyone share the material "in whole or in part"
+for non-commercial purposes with attribution, and forbids sharing adapted versions. The demo
+shares our own model outputs plus unmodified excerpts (transaction IDs and payment edges),
+with attribution and a licence link in the Space's README. Labels stay out of the demo:
+D-012 limits it to model outputs and small subgraphs, and the demo works without them. This
+is a cautious reading, not legal advice.
+
+## D-041: Serving dependencies split out of the training stack
+**Decision.** `[project].dependencies` holds only what the serving code imports (NumPy,
+pandas, PyArrow, NetworkX, the Neo4j driver, PyYAML). The ML stack (XGBoost, scikit-learn,
+SciPy, MLflow, Matplotlib) moves to an `ml` group, and the API and dashboard get their own
+groups. Local `uv sync` still installs everything; the images install only their group.
+**Why.** The images stay small and torch- and XGBoost-free. A test imports the API and
+dashboard code in a fresh process and fails if any training library gets loaded.

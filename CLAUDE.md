@@ -18,7 +18,9 @@ Neo4j 5 Community + GDS plugin, MLflow (local store), FastAPI, Streamlit, pytest
 ## Ports and resources
 - API: `PORT` env var, default 8000. Dashboard: `PORT`, default 8501.
 - Neo4j: 7474 (browser) / 7687 (bolt), local compose only, bound to 127.0.0.1.
-- Memory: Neo4j ~1.5 GB, API and dashboard ~300 MB each (to be measured in Phase 6).
+- Memory (measured in Phase 6, `docker stats`): Neo4j ~2.1 GB, API ~300 MB, dashboard
+  ~50 MB calling the API; the in-process Space mode needs ~300 MB once its data is loaded. Host ports overridable via API_HOST_PORT /
+  DASHBOARD_HOST_PORT. Space container: port 7860.
 - Serving images are torch-free: embeddings, scores and SHAP values are precomputed offline.
 
 ## Commands
