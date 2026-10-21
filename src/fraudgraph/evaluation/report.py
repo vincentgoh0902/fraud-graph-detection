@@ -148,7 +148,7 @@ def comparison_table(finals: pd.DataFrame, model: str, k: int) -> str:
     return "\n".join(lines)
 
 
-def _signed(v: float) -> str:
+def signed(v: float) -> str:
     return f"{round(v, 3) + 0.0:+.3f}"  # + 0.0 turns -0.0 into 0.0
 
 
@@ -238,9 +238,9 @@ def pair_interval_table(rows: list[tuple[str, str, dict[str, float]]], k: int) -
         cells = [
             src,
             dst,
-            f"{_signed(r['pr_auc_change'])} [{_signed(r['pr_auc_lo'])}, {_signed(r['pr_auc_hi'])}]",
-            f"{_signed(r['precision_at_k_change'])} "
-            f"[{_signed(r['precision_at_k_lo'])}, {_signed(r['precision_at_k_hi'])}]",
+            f"{signed(r['pr_auc_change'])} [{signed(r['pr_auc_lo'])}, {signed(r['pr_auc_hi'])}]",
+            f"{signed(r['precision_at_k_change'])} "
+            f"[{signed(r['precision_at_k_lo'])}, {signed(r['precision_at_k_hi'])}]",
             f"{r['share_positive']:.0%}",
         ]
         lines.append("| " + " | ".join(cells) + " |")

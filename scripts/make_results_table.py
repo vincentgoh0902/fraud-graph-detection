@@ -9,17 +9,29 @@ between <!-- results-phase4:start --> and <!-- results-phase4:end --> (Phase 4, 
 figure docs/figures/per_step_f1.png). Every number comes from MLflow; nothing in those
 blocks is edited by hand. The Phase 3 and 4 blocks include a paired bootstrap over test
 steps, computed from each final run's logged test scores (D-024).
+
+Phase 5: between <!-- findings:start --> and <!-- findings:end -->, the tables and figures of
+the latest analysis run (scripts/run_analysis.py, D-033).
 """
 
 import sys
+from pathlib import Path
 
 import mlflow
 import numpy as np
 import pandas as pd
 
-from fraudgraph.config import REPO_ROOT, load_experiment_config
+from fraudgraph.analysis import report as findings
+from fraudgraph.analysis.explain import feature_group
+from fraudgraph.config import REPO_ROOT, load_config, load_experiment_config
 from fraudgraph.evaluation.compare import paired_step_bootstrap
-from fraudgraph.evaluation.plots import per_step_f1_figure
+from fraudgraph.evaluation.plots import (
+    group_shares_figure,
+    illicit_scores_figure,
+    per_step_f1_figure,
+    retrain_figure,
+    top_features_figure,
+)
 from fraudgraph.evaluation.report import (
     COMPARISONS,
     FEATURE_NAMES,
@@ -36,34 +48,17 @@ from fraudgraph.evaluation.report import (
     replace_between_markers,
     results_tables,
 )
+from fraudgraph.evaluation.runs import (
+    Pair,
+    best_gnn,
+    load_step_tables,
+    load_test_scores,
+    phase3_pairs,
+    phase4_pairs,
+    runs_for,
+    runs_of,
+)
 from fraudgraph.tracking import setup_tracking
-
-
-def runs_of(experiment: str) -> pd.DataFrame:
-    setup_tracking(experiment)
-    runs = mlflow.search_runs(experiment_names=[experiment])
-    if runs.empty or "tags.role" not in runs:
-        return pd.DataFrame()
-    return runs[runs["tags.role"].isin(["candidate", "final"])]
-
-
-def load_test_scores(finals: pd.DataFrame, model: str, feature_set: str) -> list[pd.DataFrame]:
-    """The logged test scores of each seed's final run, sorted by seed."""
-    runs = finals[(finals["tags.model"] == model) & (finals["tags.feature_set"] == feature_set)]
-    out = []
-    for _, run in runs.sort_values("tags.seed").iterrows():
-        path = mlflow.artifacts.download_artifacts(
-            run_id=run["run_id"], artifact_path="test_scores.parquet"
-        )
-        out.append(pd.read_parquet(path))
-    return out
-
-
-Pair = tuple[tuple[str, str], tuple[str, str]]  # ((model, feature set), (model, feature set))
-
-
-def runs_for(finals: pd.DataFrame, model: str, feature_set: str) -> pd.DataFrame:
-    return finals[(finals["tags.model"] == model) & (finals["tags.feature_set"] == feature_set)]
 
 
 def bootstrap_pairs(finals: pd.DataFrame, pairs: list[Pair], k: int, cfg: dict) -> dict:
@@ -98,32 +93,8 @@ def bootstrap_pairs(finals: pd.DataFrame, pairs: list[Pair], k: int, cfg: dict) 
 
 def bootstrap_intervals(finals: pd.DataFrame, k: int, cfg: dict) -> dict:
     """Paired step bootstrap for each Phase 3 XGBoost feature-set comparison."""
-    pairs = [(("xgboost", src), ("xgboost", dst)) for src, dst in COMPARISONS]
-    r = bootstrap_pairs(finals, pairs, k, cfg)
+    r = bootstrap_pairs(finals, phase3_pairs(), k, cfg)
     return {(src, dst): r[(("xgboost", src), ("xgboost", dst))] for src, dst in COMPARISONS}
-
-
-def best_gnn(finals: pd.DataFrame, feature_set: str) -> str:
-    """The GNN with the higher mean validation PR-AUC on this feature set (never test)."""
-    g = finals[
-        finals["tags.model"].isin(["gcn", "sage"]) & (finals["tags.feature_set"] == feature_set)
-    ]
-    return str(g.groupby("tags.model")["metrics.val_pr_auc"].mean().idxmax())
-
-
-def phase4_pairs(finals: pd.DataFrame) -> list[Pair]:
-    """The Phase 4 comparisons, fixed before any Phase 4 result was seen (D-031)."""
-    pairs = []
-    for fs in ("local", "all"):
-        pairs.append((("xgboost", fs), (best_gnn(finals, fs), fs)))
-    for fs in ("local", "all"):
-        pairs.append((("xgboost", fs), ("xgboost", f"{fs}+emb")))
-    for fs in ("local", "all"):
-        pairs.append((("gcn", fs), ("sage", fs)))
-    present = {
-        (m, f) for m, f in zip(finals["tags.model"], finals["tags.feature_set"], strict=True)
-    }
-    return [p for p in pairs if p[0] in present and p[1] in present]
 
 
 # The figure's series, fixed in advance: everything built on (b), the strongest base.
@@ -141,16 +112,6 @@ FIGURE_LABELS = {
     ("sage", "all"): "GraphSAGE (b)",
     ("xgboost", "all+emb"): "Hybrid: XGBoost (b) + embeddings",
 }
-
-
-def load_step_tables(finals: pd.DataFrame, model: str, feature_set: str) -> list[pd.DataFrame]:
-    out = []
-    for _, run in runs_for(finals, model, feature_set).sort_values("tags.seed").iterrows():
-        path = mlflow.artifacts.download_artifacts(
-            run_id=run["run_id"], artifact_path="per_step_test.csv"
-        )
-        out.append(pd.read_csv(path, index_col="time_step"))
-    return out
 
 
 def phase4_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict) -> str:
@@ -187,6 +148,89 @@ def phase4_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict
         + "\n\n![Illicit F1 per test step](docs/figures/per_step_f1.png)"
         + "\n\n<details><summary>The figure's numbers (illicit F1 per test step, mean over "
         "seeds)</summary>\n\n" + per_step_table(series) + "\n\n</details>"
+    )
+
+
+def findings_block(k: int) -> str | None:
+    """The Phase 5 Findings tables and figures, from the latest analysis run."""
+    cfg = load_config("analysis")
+    setup_tracking(cfg["experiment"])
+    runs = mlflow.search_runs(experiment_names=[cfg["experiment"]],
+                              filter_string="tags.role = 'analysis'")  # fmt: skip
+    if runs.empty:
+        return None
+    run = runs.sort_values("tags.run_group").iloc[-1]
+    root = Path(mlflow.artifacts.download_artifacts(run_id=run["run_id"]))
+
+    def t(name: str) -> pd.DataFrame:
+        return pd.read_csv(root / name, index_col=0)
+
+    psi, imp = t("shift/psi.csv"), t("shap/importance.csv")
+    train_imp = (imp[imp["period"] == "reference"].groupby("feature")["mean_abs_shap"].mean()
+                 .sort_values(ascending=False))  # fmt: skip
+    shap_rank = pd.Series(range(1, len(train_imp) + 1), index=train_imp.index)
+    figures = REPO_ROOT / "docs" / "figures"
+    seed = 0
+    illicit_scores_figure(t("shift/scores.csv"), seed, figures / "illicit_scores.png")
+    group_shares_figure(t("shap/group_shares.csv"), figures / "shap_groups.png")
+    top = train_imp.head(cfg["shap"]["top_n"])
+    top_features_figure(top, [feature_group(f) for f in top.index],
+                        figures / "shap_top_features.png")  # fmt: skip
+    retrain_figure(t("retrain/per_step.csv"), figures / "retrain.png")
+
+    per_step = t("retrain/per_step.csv")
+    smd = t("errors/feature_contrast.csv").head(cfg["errors"]["top_n"])
+    contrast = ", ".join(f"`{f}` ({r['mean']:+.2f})" for f, r in smd.iterrows())
+    agree = t("errors/seed_agreement.csv")["n_illicit"]
+    return (
+        f"Analysis run `{run['tags.run_group']}`: XGBoost on "
+        f"{FEATURE_NAMES[run['tags.feature_set']]}, the model with the best validation PR-AUC "
+        "([D-033](docs/decisions.md)), refitted and "
+        "checked against its logged scores ([D-034](docs/decisions.md)). Mean ± std over 3 "
+        "seeds.\n\n"
+        "**1. Ranking or threshold?** (labelled transactions; precision, recall and F1 at the "
+        "validation-tuned threshold; recall@K and oracle F1 are per-step means; the oracle "
+        "picks each step's best threshold from that step's own labels, a ceiling, not a result)"
+        "\n\n"
+        + findings.period_table(t("shift/period_metrics.csv"), k)
+        + "\n\n![Scores of illicit transactions](docs/figures/illicit_scores.png)"
+        "\n\n**2. Feature drift against the training period** (PSI per feature, all "
+        "transactions)\n\n"
+        + findings.drift_table(psi, cfg["drift"]["large_psi"])
+        + "\n\n**Hidden clocks**: features whose per-step median moves with the time step in the "
+        f"training period (|Spearman| ≥ {findings.CLOCK_RHO}; [D-036](docs/decisions.md))\n\n"
+        + findings.clock_table(psi, shap_rank)
+        + "\n\n**3–4. Adversarial validation**: can a classifier tell two periods apart? (folds "
+        "grouped by time step; the training early vs late row is a control added after the "
+        "first results, [D-036](docs/decisions.md))\n\n"
+        + findings.adversarial_table(t("shift/adversarial.csv"))
+        + "\n\n**5. Do the planned comparisons hold in both periods?** (paired bootstrap over "
+        "the steps of each period, [D-024](docs/decisions.md))\n\n"
+        + findings.period_bootstrap_table(t("shift/period_bootstrap.csv"), k)
+        + "\n\n**6. SHAP** (TreeSHAP, log-odds scale)\n\n"
+        "![Top features by mean |SHAP|](docs/figures/shap_top_features.png)\n\n"
+        "![SHAP share by feature group](docs/figures/shap_groups.png)\n\n"
+        + findings.group_share_table(t("shap/group_shares.csv"), t("shap/rank_correlation.csv"))
+        + "\n\n**7. False negatives** (illicit test transactions below the validation-tuned "
+        "threshold)\n\n"
+        + findings.missed_table(t("errors/summary.csv"))
+        + "\n\nMissed vs caught: graph context (medians) and mean signed SHAP per feature group "
+        "(negative pushes towards licit)\n\n"
+        + findings.context_table(t("errors/context.csv"), t("errors/group_shap.csv"))
+        + f"\n\nLargest feature differences, missed vs caught (standardised mean difference): "
+        f"{contrast}.\n\nOf the {int(agree.sum())} illicit test transactions, "
+        f"{int(agree.iloc[-1])} are missed by all three seeds and {int(agree.iloc[0])} by none; "
+        f"{int(agree.iloc[1:-1].sum())} depend on the seed.\n\n"
+        "Would another model have caught XGBoost's misses? (each at its own validation threshold, "
+        "seed matched to seed)\n\n"
+        + findings.other_models_table(t("errors/other_models.csv"))
+        + "\n\n**8. Retraining simulation** ([D-035](docs/decisions.md); uses test-period labels, "
+        "so not comparable with the results above)\n\n"
+        "![Frozen vs retrained F1 per step](docs/figures/retrain.png)\n\n"
+        + findings.retrain_table(t("retrain/pooled.csv"))
+        + "\n\n<details><summary>Per step</summary>\n\n"
+        + findings.retrain_step_table(per_step)
+        + "\n\n</details>"
     )
 
 
@@ -230,6 +274,10 @@ def main() -> int:
         )  # fmt: skip
         block = phase4_block(everything, gnn_runs, k, graph_cfg["comparison"])
         text = replace_between_markers(text, block, "results-phase4")
+        print(block)
+    block = findings_block(k)
+    if block is not None:
+        text = replace_between_markers(text, block, "findings")
         print(block)
     readme.write_text(text)
     return 0
