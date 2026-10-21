@@ -7,23 +7,28 @@ authors = [
     { name = "vincentgoh0902", email = "e1121484@u.nus.edu" }
 ]
 requires-python = ">=3.12"
-# Runtime deps are added phase by phase, so each one has a reason to be here.
+# Runtime deps are added phase by phase, so each one has a reason to be here. This list is
+# only what the serving code imports; the training stack lives in the `ml` group (D-041).
 dependencies = [
-    "matplotlib>=3.11.2",
-    "mlflow>=3",
     "neo4j>=6.4.1",
     "networkx>=3.7",
     "numpy>=2.5.4",
     "pandas>=3.0.6",
     "pyarrow>=24",
     "pyyaml>=6.0",
+]
+
+[dependency-groups]
+# Experiments, evaluation and analysis (Phases 2-5). Not installed in serving images.
+ml = [
+    "matplotlib>=3.11.2",
+    "mlflow>=3",
     "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
     "xgboost>=3.4.1",
 ]
-
-[dependency-groups]
 dev = [
+    "httpx2>=2.15.1",
     "ipykernel>=7.4.0",
     "jupyterlab>=4.6.4",
     "kaggle>=1.7",
@@ -32,7 +37,17 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.12",
 ]
-# Training-only deps (Phase 4 GNNs). Serving images install neither group, so they stay
+# Serving (Phase 6): each image installs only its own group (D-041).
+api = [
+    "fastapi>=0.143.3",
+    "uvicorn>=0.54.0",
+]
+dashboard = [
+    "pyvis>=0.3.2",
+    "requests>=2.34.2",
+    "streamlit>=1.66.0",
+]
+# Training-only deps (Phase 4 GNNs). Serving images never install this group, so they stay
 # torch-free (embeddings and scores are precomputed offline).
 train = [
     "torch>=2.14.1",
@@ -40,7 +55,7 @@ train = [
 ]
 
 [tool.uv]
-default-groups = ["dev", "train"]
+default-groups = ["dev", "ml", "train", "api", "dashboard"]
 
 # On Linux (CI), PyPI's torch wheel bundles CUDA (several GB). The CPU-only index has the
 # same version without it. macOS wheels from PyPI are already CPU/MPS only.

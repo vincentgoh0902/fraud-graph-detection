@@ -40,3 +40,6 @@ htmlcov/
 
 # Node (in case a frontend tool sneaks in)
 node_modules/
+
+# Assembled Hugging Face Space folder (scripts/build_space.py)
+/build/

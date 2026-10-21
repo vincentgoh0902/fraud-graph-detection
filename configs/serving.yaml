@@ -1,0 +1,30 @@
+# Phase 6: serving. See docs/decisions.md D-038 to D-041.
+
+# The served model is read from the latest Phase 5 analysis run (its checked refit, D-034).
+analysis_experiment: analysis
+seed: 0                    # D-039
+steps: [35, 49]            # out-of-sample period only (D-040)
+top_shap: 10               # SHAP contributions kept per transaction
+output_dir: artifacts/serving
+
+# The public Hugging Face Space ships a subset (D-012, D-040).
+demo:
+  output_dir: artifacts/space
+  alerts_per_step: 20
+  hops: 2
+  include_labels: false    # until the licence check before publishing
+
+# Query limits (D-040). The API refuses anything larger with 422.
+limits:
+  max_hops: 3
+  max_k: 100
+  max_nodes: 500
+  max_path_len: 6
+  max_paths: 20
+
+# scripts/measure_latency.py (brief section 6: 100 requests per endpoint).
+latency:
+  experiment: serving
+  n_requests: 100
+  warmup: 10
+  seed: 0

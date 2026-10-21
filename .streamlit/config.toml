@@ -1,0 +1,14 @@
+# The risk ramp and SHAP colours were validated on the light surface only.
+[theme]
+base = "light"
+backgroundColor = "#fcfcfb"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+
+# Viewer mode: no developer menu or "Deploy" button in the public demo.
+[client]
+toolbarMode = "viewer"

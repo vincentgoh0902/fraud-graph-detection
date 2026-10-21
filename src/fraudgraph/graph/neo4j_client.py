@@ -173,3 +173,44 @@ def structural_gds(
     for col in ("in_degree", "out_degree", "community_id"):
         out[col] = out[col].astype("int64")
     return out
+
+
+def write_predictions(
+    driver: Driver, transactions: pd.DataFrame, model_version: str, database: str, batch_size: int
+) -> None:
+    """Store the served predictions as node properties, so Cypher can filter on them.
+
+    Properties: risk_score, predicted_label, model_version and community_id (brief section 5).
+    Old predictions are removed first, so a node outside the served steps never keeps a
+    stale score. Labels are never written (D-019).
+    """
+    rows = [
+        {"tx_id": int(t), "risk": float(r), "pred": int(p), "comm": int(c)}
+        for t, r, p, c in zip(
+            transactions["tx_id"], transactions["risk_score"],
+            transactions["predicted_label"], transactions["community_id"], strict=True,
+        )
+    ]  # fmt: skip
+    with driver.session(database=database) as session:
+        session.run(
+            "MATCH (t:Transaction) WHERE t.risk_score IS NOT NULL "
+            "CALL (t) { REMOVE t.risk_score, t.predicted_label, t.model_version, t.community_id }"
+            " IN TRANSACTIONS OF 10000 ROWS"
+        ).consume()
+        # The investigation queries filter on the step and on the flag.
+        session.run(
+            "CREATE INDEX tx_step IF NOT EXISTS FOR (t:Transaction) ON (t.time_step)"
+        ).consume()
+        for batch in _batches(rows, batch_size):
+            session.run(
+                "UNWIND $rows AS r MATCH (t:Transaction {tx_id: r.tx_id}) "
+                "SET t.risk_score = r.risk, t.predicted_label = r.pred, "
+                "t.model_version = $version, t.community_id = r.comm",
+                rows=batch,
+                version=model_version,
+            ).consume()
+        n = session.run(
+            "MATCH (t:Transaction) WHERE t.model_version = $v RETURN count(t) AS n", v=model_version
+        ).single()["n"]
+    if n != len(rows):
+        raise RuntimeError(f"Wrote predictions to {n} nodes, expected {len(rows)}")

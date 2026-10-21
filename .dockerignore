@@ -1,0 +1,15 @@
+# Keep the build context small and free of data, runs, models and secrets.
+.env
+.git
+.venv
+data
+mlruns
+neo4j
+artifacts
+build
+notebooks
+docs
+tests
+**/__pycache__
+.pytest_cache
+.ruff_cache

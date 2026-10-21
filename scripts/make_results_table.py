@@ -12,6 +12,9 @@ steps, computed from each final run's logged test scores (D-024).
 
 Phase 5: between <!-- findings:start --> and <!-- findings:end -->, the tables and figures of
 the latest analysis run (scripts/run_analysis.py, D-033).
+
+Phase 6: between <!-- latency:start --> and <!-- latency:end -->, the latest latency run per
+graph backend (scripts/measure_latency.py).
 """
 
 import sys
@@ -58,6 +61,7 @@ from fraudgraph.evaluation.runs import (
     runs_for,
     runs_of,
 )
+from fraudgraph.serving.latency import latency_table
 from fraudgraph.tracking import setup_tracking
 
 
@@ -234,6 +238,31 @@ def findings_block(k: int) -> str | None:
     )
 
 
+def latency_block() -> str | None:
+    """The latest latency run of each backend, as one table."""
+    lat = load_config("serving")["latency"]
+    setup_tracking(lat["experiment"])
+    runs = mlflow.search_runs(experiment_names=[lat["experiment"]])
+    if runs.empty:
+        return None
+    runs = runs[runs["tags.role"] == "latency"].sort_values("tags.run_group")
+    by_backend, notes = {}, []
+    for backend, g in runs.groupby("tags.backend"):
+        run = g.iloc[-1]
+        path = mlflow.artifacts.download_artifacts(
+            run_id=run["run_id"], artifact_path="latency.csv"
+        )
+        by_backend[backend] = pd.read_csv(path)
+        notes.append(run)
+    run = notes[0]
+    return (
+        latency_table(by_backend)
+        + f"\n\n{int(run['params.n_requests'])} requests per endpoint after "
+        f"{int(run['params.warmup'])} warm-up requests; {run['params.client']}; "
+        f"`{run['params.machine']}`. Model `{run['tags.model_version']}`."
+    )
+
+
 def main() -> int:
     base_cfg = load_experiment_config("baselines")
     graph_cfg = load_experiment_config("graph_features")
@@ -278,6 +307,10 @@ def main() -> int:
     block = findings_block(k)
     if block is not None:
         text = replace_between_markers(text, block, "findings")
+        print(block)
+    block = latency_block()
+    if block is not None:
+        text = replace_between_markers(text, block, "latency")
         print(block)
     readme.write_text(text)
     return 0
