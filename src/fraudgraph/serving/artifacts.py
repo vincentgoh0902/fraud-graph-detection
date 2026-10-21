@@ -2,7 +2,7 @@
 
 - transactions.parquet: one row per served transaction (score, flag, label, community)
 - shap.parquet: the top SHAP contributions per transaction, long format
-- edges.parquet: payment edges (all test-period edges, or the Space subset, D-040)
+- edges.parquet: payment edges (all test-period edges, or the public demo subset, D-040)
 - per_step.csv: the served model's logged test metrics per step, for the dashboard
 - meta.json: model version, threshold, SHAP base value and what this export contains
 """

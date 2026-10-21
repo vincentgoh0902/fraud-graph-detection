@@ -7,7 +7,7 @@ steps: [35, 49]            # out-of-sample period only (D-040)
 top_shap: 10               # SHAP contributions kept per transaction
 output_dir: artifacts/serving
 
-# The public Hugging Face Space ships a subset (D-012, D-040).
+# The public demo ships a subset (D-012, D-040, D-042).
 demo:
   output_dir: artifacts/space
   alerts_per_step: 20

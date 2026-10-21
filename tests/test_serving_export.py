@@ -1,4 +1,4 @@
-"""Phase 6 export (D-038, D-040): the tables the API and the Space read."""
+"""Phase 6 export (D-038, D-040): the tables the API and the public demo read."""
 
 import numpy as np
 import pandas as pd

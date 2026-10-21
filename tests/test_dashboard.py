@@ -1,4 +1,4 @@
-"""The dashboard renders every view without errors, in-process (the Space's mode)."""
+"""The dashboard renders every view without errors, in-process (the public demo's mode)."""
 
 import sys
 

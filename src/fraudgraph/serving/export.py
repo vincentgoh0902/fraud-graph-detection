@@ -1,4 +1,4 @@
-"""Building the serving tables from model outputs (D-038), and the Space subset (D-040).
+"""Building the serving tables from model outputs (D-038), and the public demo subset (D-040).
 
 Only NumPy and pandas here; scripts/export_serving.py does the scoring with XGBoost.
 """
@@ -76,7 +76,7 @@ def demo_subset(
     hops: int,
     include_labels: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, list[int]]:
-    """What the public Space may ship (D-012, D-040).
+    """What the public demo may ship (D-012, D-040).
 
     Scores and SHAP for every served transaction (model outputs), but edges only inside the
     `hops`-neighbourhoods of each step's top alerts, so no full edge list leaves the repo.
