@@ -411,3 +411,108 @@ mean validation PR-AUC (0.904) was just below the winner's (0.909), so more epoc
 have changed which GCN setting wins. Raising the cap is a budget increase for one model,
 which D-014 does not allow without re-running the baselines likewise, and it would not
 close a 0.3 test PR-AUC gap. One other run hit the cap (GCN (a), setting 2), also not a winner.
+
+## D-033: Phase 5 analyses fixed before running them
+**Why.** As with D-031, choosing what to analyse after seeing results would let the choice
+favour a story. Some test numbers are already public (the Phase 4 per-step F1 table), so every
+choice below has a reason that does not come from those numbers.
+**Periods.** Test is split into *before* (steps 35–42) and *after* (43–49) the dark-market
+shutdown that Weber et al. (2019) report at step 43. The split point comes from the paper,
+not from our F1 curve. Drift is measured against the training period (steps 1–29).
+**Model analysed.** The model with the highest mean validation PR-AUC among all Phase 2–4
+final runs: XGBoost on (b) + graph features (0.994). Selected in code by that rule; test plays
+no part.
+**Analyses, all on this model unless stated.**
+1. *Ranking or threshold?* Per period: recall at the validation-tuned threshold, recall@20,
+   PR-AUC, and the scores given to illicit transactions. Also a per-step *oracle* F1 (the best
+   threshold chosen with that step's own labels). The oracle is a diagnostic ceiling, never a
+   result: if it is also near zero, the model cannot rank the late illicit transactions, and
+   no threshold would fix that.
+2. *Feature drift.* PSI per feature (10 quantile bins of the training period), training vs
+   before and training vs after, on all transactions (labels are not needed).
+3. *Adversarial validation.* A classifier that tells training-period transactions from
+   after-period ones, cross-validated with folds grouped by time step. Its AUC says how
+   different the periods look; its SHAP importances say where. Training vs before is the
+   reference.
+4. *A new kind of illicit?* The same, on illicit transactions only: training-period illicit
+   vs after-period illicit (about 170 transactions, so the AUC is rough).
+5. *Does the graph's effect hold over time?* The planned paired bootstraps (D-024 and D-031)
+   rerun separately on the before and after periods.
+6. *SHAP* (D-034): global importance, the share of attribution per feature group (local,
+   aggregated, structure, risk), and how it changes between training, before and after.
+7. *False negatives.* Illicit test transactions below the validation-tuned max-F1 threshold
+   vs those above it: how many per period, how far below, graph context (degree, neighbour
+   risk), feature contrast, SHAP by group, agreement across seeds, and whether GraphSAGE (b)
+   or the hybrid (b) flag them at their own thresholds.
+8. *Retraining simulation* (D-035).
+**Seeds.** Everything per seed (0, 1, 2) and reported as mean ± std, except where a single
+set is needed (figures use seed 0, stated on the figure).
+
+## D-034: SHAP with XGBoost's own TreeSHAP, on a checked refit
+**Method.** XGBoost computes exact TreeSHAP values itself (`pred_contribs=True`), so the
+`shap` package (and its numba dependency) is not needed. Values are on the log-odds scale;
+each transaction's values plus the bias add up to the model's raw output (tested). Phase 6
+serves precomputed SHAP values, so the same function feeds the API.
+**Refit.** No model file was saved in Phases 2–4, only scores. The model is refitted from its
+logged parameters and seed and must reproduce both the logged validation PR-AUC and the
+logged test scores exactly, or the analysis stops. The refit is saved under `data/models/`
+(git-ignored) for Phase 6.
+**Limitation.** Elliptic's features are anonymised, so SHAP can say "local feature 53 pushes
+towards licit", not what that feature measures.
+
+## D-035: Retraining simulation, kept apart from the headline results
+**Question.** Would retraining as labels arrive have avoided the collapse after step 42, or
+are the late illicit transactions undetectable from what came before?
+**Design.** For each test step t: train XGBoost on (b) on steps 1 to t−6, tune the threshold on
+t−5 to t−1, score step t. This mirrors the main protocol (train 1–29, validate 30–34, test
+the step after) with the window moved forward. Settings are the ones selected in Phase 2; no
+re-tuning. Three seeds. Compared step by step with the frozen XGBoost (b).
+**Why XGBoost (b), not (b) + graph.** Graph features need the stage-1 out-of-fold model
+rebuilt for each window (D-001), and Phase 3 found no gain from them distinguishable from
+zero. Plain (b) answers the same question at a fraction of the cost.
+**Not a result.** It uses test-period labels for training, so it is a "what if", reported in
+its own section and never in the model comparison. It also assumes labels arrive at once;
+in practice they lag, so it is an optimistic bound on what retraining could do.
+
+## D-036: Two checks added after the first analysis results
+D-033 fixed the analyses in advance. These two were added after its first run, so they are
+labelled as post-hoc wherever they appear.
+**Why.** Adversarial validation separated *every* pair of periods almost perfectly (AUC ≈ 1.0),
+including training vs before-shutdown, where the model still works. Without a reference point
+that number cannot be read. The PSI of a few aggregated features was about 8, even on
+validation.
+**Control.** The same adversarial classifier on two stretches of the training period (steps 1–24
+vs 25–29), with no known market event between them. If those are separable too, separability
+says nothing specific about the shutdown.
+**Hidden clocks.** For each feature, the Spearman correlation between the time step and the
+feature's per-step median, on training-period rows only (no test data). |ρ| ≥ 0.95 marks the
+feature as a clock: its typical value moves steadily with time, so it encodes the date even
+though `time_step` itself is excluded (D-013). Their SHAP rank shows whether the model uses them.
+**Not changed.** No model, threshold or period was changed after seeing results.
+
+## D-037: Finding — the collapse after step 42 is a ranking failure that no model fixes
+**Evidence (Phase 5 analysis run, README Findings).**
+- After step 42 the selected model misses 166 of 169 illicit transactions. Their median score
+  is 0.002, around the licit transactions' 90th percentile, and the best threshold chosen with
+  each step's own labels reaches only F1 0.21 (0.90 before). Re-tuning the threshold would not help:
+  the model ranks these transactions like licit ones.
+- The model's reasoning does not change: SHAP shares by feature group and per-feature
+  importance ranks are stable across periods (rank correlation 0.96–0.97 with training). What
+  changes is the transactions. Missed illicit transactions get licit-looking local features
+  (mean SHAP −3.1 log-odds, vs +4.9 for caught ones) and licit-looking neighbourhoods
+  (median neighbour risk 0.002 vs 0.089).
+- Six aggregated features are hidden clocks (D-036), and they explain the large PSI and
+  adversarial AUCs. Even two stretches of the training period are separable (AUC 0.999). So
+  generic drift is present throughout, and the model barely uses the clocks (SHAP rank 36–76 of 174);
+  that drift is not what broke it.
+- No graph method helps after the shutdown: GraphSAGE (b) and the hybrid flag 0–1 of the 166
+  misses. The GNNs' deficit to XGBoost is entirely in steps 35–42; after 42 every model is near zero.
+- Retraining as labels arrive (D-035) recovers partly and slowly: pooled F1 after the
+  shutdown rises from 0.024 to 0.268, with steps 43–45 still near zero and step 49 at 0.49.
+**Reading.** After the shutdown, illicit activity looks licit to every feature the dataset
+offers, and to the graph. A model trained on the old pattern cannot rank it, and only labels
+from the new pattern bring detection back. The features are anonymised, so *what* changed
+cannot be named.
+**Also seen.** Neighbour and community risk features drift on validation already (median PSI
+0.46). That fits the known limitation of D-001 (out-of-fold stage-1 scores for training nodes,
+the full stage-1 model for later nodes), but this analysis cannot separate it from real change.
