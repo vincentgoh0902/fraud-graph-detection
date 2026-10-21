@@ -53,13 +53,19 @@ def make_model(name: str, params: dict[str, Any], seed: int, y_train: np.ndarray
     raise ValueError(f"Unknown model {name!r}; expected one of {MODELS}")
 
 
+def fit_model(
+    name: str, params: dict[str, Any], seed: int, X: np.ndarray, y: np.ndarray, mask: np.ndarray
+):
+    """Fit one model on the rows in mask. Phase 5 uses the fitted model itself (SHAP)."""
+    model = make_model(name, params, seed, y[mask])
+    return model.fit(X[mask], y[mask])
+
+
 def tabular_fit_fn(name: str, X: np.ndarray, y: np.ndarray, split: TemporalSplit) -> FitFn:
     """Adapt a model to the protocol: train on the train mask, score any period's mask."""
 
     def fit(params, seed):
-        y_train = y[split.train]
-        model = make_model(name, params, seed, y_train)
-        model.fit(X[split.train], y_train)
+        model = fit_model(name, params, seed, X, y, split.train)
 
         def score(period: str) -> np.ndarray:
             return model.predict_proba(X[getattr(split, period)])[:, 1]

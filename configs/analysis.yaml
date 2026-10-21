@@ -1,0 +1,53 @@
+# Phase 5: analysis. Every choice here was fixed before running it (D-033).
+experiment: analysis
+
+# The experiments whose final runs compete for "best model by validation PR-AUC".
+candidates_from: [baselines, graph_features, gnn, hybrid]
+
+# Inclusive time-step ranges. The before/after split is the dark-market shutdown at step 43
+# reported by Weber et al. (2019), not a point read off our results.
+periods:
+  reference: [1, 29]   # training period: what "normal" looks like to the model
+  val: [30, 34]
+  before: [35, 42]
+  after: [43, 49]
+  # Control for adversarial validation, added after seeing its first results (D-036): two
+  # stretches of the training period, with no known market event between them.
+  control_early: [1, 24]
+  control_late: [25, 29]
+
+drift:
+  psi_bins: 10
+  large_psi: 0.25      # the usual "large shift" line for PSI
+
+# Classifier that tries to tell two periods apart. Small and fixed: it measures how
+# separable the periods are, so it is not tuned.
+adversarial:
+  n_folds: 5
+  seed: 0
+  params:
+    n_estimators: 200
+    max_depth: 4
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.5
+
+shap:
+  top_n: 15            # features shown in the importance figure
+
+errors:
+  top_n: 10            # features shown in the FN vs TP contrast
+  # Other models asked "would you have caught XGBoost's misses?" (D-033, item 7).
+  compare_with: [[sage, all], [xgboost, all+emb]]
+
+# Retraining simulation (D-035): XGBoost on (b) with its Phase 2 settings.
+retrain:
+  feature_set: all
+  val_len: 5
+
+# Paired bootstrap per period (D-024), same settings as Phase 3 and 4.
+comparison:
+  n_bootstrap: 1000
+  seed: 0
+
+models_dir: data/models   # git-ignored; the refitted model is reused by Phase 6

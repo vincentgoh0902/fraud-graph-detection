@@ -7,11 +7,26 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 4 (GNNs and hybrid). Results, plots and a live demo will appear here as the
-> project progresses. Every number in this README will be generated from logged
-> experiment runs, not typed by hand.
+> Status: Phase 5 (analysis) done; [Findings](#findings-phase-5) below. Serving and a live
+> demo come in Phase 6. Every table and figure in this README is generated from logged
+> MLflow runs by `scripts/make_results_table.py`, not typed by hand.
 
-## Approach (planned)
+## In short
+
+- **Graph structure did not help.** XGBoost on the dataset's own features matched or beat
+  engineered Neo4j graph features, GCN, GraphSAGE and a GNN-embedding hybrid.
+- **Every model collapses after the dark-market shutdown at step 43.** The analysis shows
+  why: the new illicit transactions look licit in their own features *and* in their
+  neighbourhoods, so no model, graph-based or not, ranks them as risky.
+- **Input-drift alarms could not have flagged it.** Six anonymised features act as hidden
+  clocks, so any two periods look different, even two stretches of the training data.
+- **What helps is retraining on new labels, not a different model**, and only once labels
+  from the new pattern exist.
+
+Details and numbers: [Findings](#findings-phase-5). The reasoning behind each design choice
+is in [`docs/decisions.md`](docs/decisions.md).
+
+## Approach
 
 - **Data:** Elliptic Bitcoin dataset (Weber et al., 2019): ~200k transactions,
   49 time steps, ~2% labelled illicit.
@@ -21,8 +36,8 @@ improvement hold over time?
 - **Models:** logistic regression, random forest, XGBoost, GCN, GraphSAGE, and a
   hybrid (GNN embeddings + XGBoost).
 - **Graph features and investigation:** Neo4j Graph Data Science (PageRank,
-  Louvain communities, neighbour risk) and Cypher queries for an investigator
-  dashboard.
+  Louvain communities, neighbour risk); Cypher queries for an investigator
+  dashboard come in Phase 6.
 
 Design decisions and their reasoning are recorded in [`docs/decisions.md`](docs/decisions.md).
 
@@ -379,3 +394,206 @@ wins, not GCN's place behind XGBoost.
 Reproduce with `uv run python scripts/run_experiment.py --config gnn`, then
 `--config hybrid` (a separate process: torch and XGBoost cannot share one,
 [D-030](docs/decisions.md)), then `uv run python scripts/make_results_table.py`.
+
+## Findings (Phase 5)
+
+**Answer to the research question.** No. On Elliptic's temporal split, neither engineered
+graph features (Phase 3) nor graph neural networks (Phase 4) improve on XGBoost with the
+dataset's own features, and the answer does not change over time: before the dark-market
+shutdown the GNNs are clearly worse, and after it every model fails alike. The numbers
+below are quoted from the generated tables further down.
+
+1. **The collapse after step 42 is a ranking failure, not a threshold problem.** The selected
+   model (XGBoost on (b) + graph features) misses 166 of the 169 illicit transactions in steps
+   43–49. Their median score is 0.002, about where the licit transactions' 90th percentile sits,
+   so the model ranks them like licit ones. Even the best threshold chosen with each step's own
+   labels (a diagnostic ceiling, not a result) reaches only F1 0.21, against 0.90 before the
+   shutdown.
+2. **The model's reasoning stays the same; the transactions change.** SHAP shares by feature
+   group stay stable from training to after the shutdown (local 61% → 56%, aggregated 30% →
+   36%), and per-feature importance ranks correlate 0.96–0.97 with training. Missed illicit
+   transactions have licit-looking local features (mean SHAP −3.1 log-odds, vs +4.9 for caught
+   ones) and licit-looking neighbourhoods (median neighbour risk 0.002 vs 0.089).
+3. **Drift measures cannot isolate the shutdown, because six features are hidden clocks.**
+   `agg_7`, `agg_8`, `agg_10`, `agg_43`, `agg_44` and `agg_46` rise steadily with the time step,
+   so the time is in the data even though `time_step` is not a feature. Because of them,
+   *any* two periods can be told apart: a classifier separates two stretches of the
+   training period itself with AUC 0.999 (a control added after the first results,
+   [D-036](docs/decisions.md)). The model barely uses the clocks (SHAP rank 36–76 of 174), so
+   this generic drift is not what broke it. The features are anonymised, so what did
+   change after step 42 cannot be named.
+4. **The graph does not rescue the late steps.** GraphSAGE (b) and the hybrid flag 0–1 of
+   XGBoost's 166 late misses. Their deficit to XGBoost lies entirely in steps 35–42 (e.g.
+   GraphSAGE (b): −0.245 PR-AUC before, −0.001 after). Graph features on top of (b) show
+   +0.008 PR-AUC after the shutdown, with an interval above zero, but on a base of 0.04 PR-AUC
+   that changes nothing in practice.
+5. **The misses are systematic.** 300 of the 1,083 illicit test transactions are missed by all
+   three seeds and only 19 depend on the seed. Even before the shutdown, misses are confident
+   (median score 0.013 against a threshold of about 0.78), not near-misses.
+6. **Retraining helps, but only once new labels exist** (a what-if that uses test-period labels,
+   [D-035](docs/decisions.md)). Retraining before every step lifts F1 after the shutdown from
+   0.024 to 0.268. Steps 43–45 stay near zero; by step 49, F1 is 0.49 and PR-AUC 0.71. It
+   assumes labels arrive instantly, so it is an optimistic bound.
+
+**Limitations.** After step 42 there are only 169 illicit transactions (steps 45 and 46 have 5
+and 2), so per-step numbers there are noisy; the tables give counts next to every metric. The
+missed-vs-caught feature contrast mixes periods: misses are concentrated after the shutdown, so
+clock features appear in it for that reason alone. Recall@20 is capped when a step has more than
+20 illicit transactions, which is why it is low even where F1 is high. Neighbour-risk features
+already drift on validation (median PSI 0.46), which fits the known limitation of
+[D-001](docs/decisions.md) but cannot be separated from real change here
+([D-037](docs/decisions.md)).
+
+### The analysis
+
+What was analysed, and every choice behind it, was fixed before running it
+([D-033](docs/decisions.md)). The test period is split at the dark-market shutdown that
+Weber et al. (2019) report at step 43: *before* is steps 35–42, *after* is 43–49. Everything
+below comes from one logged analysis run; the tables and figures are generated by
+`scripts/make_results_table.py`.
+
+<!-- findings:start -->
+Analysis run `20261021-015826`: XGBoost on (b) + graph, the model with the best validation PR-AUC ([D-033](docs/decisions.md)), refitted and checked against its logged scores ([D-034](docs/decisions.md)). Mean ± std over 3 seeds.
+
+**1. Ranking or threshold?** (labelled transactions; precision, recall and F1 at the validation-tuned threshold; recall@K and oracle F1 are per-step means; the oracle picks each step's best threshold from that step's own labels, a ceiling, not a result)
+
+| Period | Illicit | PR-AUC | Precision | Recall | F1 | Recall@20 | Oracle F1 (diagnostic) | Median illicit score |
+|---|---|---|---|---|---|---|---|---|
+| Validation (30–34) | 591 | 0.994 ± 0.000 | 0.983 ± 0.003 | 0.967 ± 0.004 | 0.975 ± 0.002 | 0.371 ± 0.000 | 0.956 ± 0.002 | 0.998 ± 0.000 |
+| Test before (35–42) | 914 | 0.917 ± 0.000 | 0.944 ± 0.014 | 0.844 ± 0.006 | 0.891 ± 0.003 | 0.260 ± 0.000 | 0.897 ± 0.001 | 0.998 ± 0.000 |
+| Test after (43–49) | 169 | 0.043 ± 0.001 | 0.060 ± 0.011 | 0.018 ± 0.000 | 0.027 ± 0.001 | 0.103 ± 0.003 | 0.214 ± 0.008 | 0.002 ± 0.000 |
+
+![Scores of illicit transactions](docs/figures/illicit_scores.png)
+
+**2. Feature drift against the training period** (PSI per feature, all transactions)
+
+| Period vs training | Features with PSI > 0.25 | Median PSI: local | Median PSI: aggregated | Median PSI: graph structure | Median PSI: neighbour / community risk |
+|---|---|---|---|---|---|
+| Validation (30–34) | 29 of 174 | 0.05 | 0.05 | 0.03 | 0.46 |
+| Test before (35–42) | 28 of 174 | 0.06 | 0.04 | 0.05 | 0.29 |
+| Test after (43–49) | 37 of 174 | 0.06 | 0.07 | 0.05 | 0.23 |
+
+**Hidden clocks**: features whose per-step median moves with the time step in the training period (|Spearman| ≥ 0.95; [D-036](docs/decisions.md))
+
+| Feature | Correlation of per-step median with step (training) | PSI, test after | SHAP importance rank (training) |
+|---|---|---|---|
+| `agg_10` | +1.000 | 8.05 | 76 of 174 |
+| `agg_43` | +1.000 | 8.01 | 66 of 174 |
+| `agg_44` | +1.000 | 8.07 | 36 of 174 |
+| `agg_46` | +1.000 | 8.09 | 51 of 174 |
+| `agg_7` | +1.000 | 7.84 | 53 of 174 |
+| `agg_8` | +1.000 | 8.05 | 64 of 174 |
+
+**3–4. Adversarial validation**: can a classifier tell two periods apart? (folds grouped by time step; the training early vs late row is a control added after the first results, [D-036](docs/decisions.md))
+
+| Transactions | Period A | Period B | Rows A / B | Out-of-fold AUC |
+|---|---|---|---|---|
+| all transactions | Training (1–29) | Test before (35–42) | 120,804 / 37,820 | 0.995 |
+| all transactions | Training (1–29) | Test after (43–49) | 120,804 / 29,684 | 1.000 |
+| all transactions | Training early (1–24) | Training late (25–29) | 108,950 / 11,854 | 0.999 |
+| illicit only | Training (1–29) | Test before (35–42) | 2,871 / 914 | 1.000 |
+| illicit only | Training (1–29) | Test after (43–49) | 2,871 / 169 | 0.999 |
+| illicit only | Training early (1–24) | Training late (25–29) | 2,219 / 652 | 0.989 |
+
+**5. Do the planned comparisons hold in both periods?** (paired bootstrap over the steps of each period, [D-024](docs/decisions.md))
+
+| From | To | Period | test PR-AUC change [95% interval] | precision@20 change [95% interval] |
+|---|---|---|---|---|
+| XGBoost, (a) local | XGBoost, (b) local + aggregated | Test before (35–42) | +0.011 [+0.004, +0.018] | +0.000 [+0.000, +0.000] |
+| XGBoost, (a) local | XGBoost, (b) local + aggregated | Test after (43–49) | -0.001 [-0.014, +0.015] | +0.007 [-0.024, +0.050] |
+| XGBoost, (a) local | XGBoost, (c) local + graph | Test before (35–42) | +0.008 [+0.003, +0.013] | +0.000 [+0.000, +0.000] |
+| XGBoost, (a) local | XGBoost, (c) local + graph | Test after (43–49) | +0.002 [-0.006, +0.012] | +0.005 [-0.031, +0.036] |
+| XGBoost, (a) local | XGBoost, local + structure only | Test before (35–42) | -0.002 [-0.005, +0.002] | +0.000 [+0.000, +0.000] |
+| XGBoost, (a) local | XGBoost, local + structure only | Test after (43–49) | +0.001 [-0.002, +0.003] | +0.000 [-0.021, +0.021] |
+| XGBoost, (b) local + aggregated | XGBoost, (b) + graph | Test before (35–42) | +0.001 [-0.005, +0.006] | +0.000 [+0.000, +0.000] |
+| XGBoost, (b) local + aggregated | XGBoost, (b) + graph | Test after (43–49) | +0.008 [+0.003, +0.022] | +0.019 [+0.000, +0.057] |
+| XGBoost, (a) local | GraphSAGE, (a) local | Test before (35–42) | -0.104 [-0.209, -0.046] | -0.040 [-0.069, -0.015] |
+| XGBoost, (a) local | GraphSAGE, (a) local | Test after (43–49) | -0.006 [-0.020, +0.014] | +0.007 [-0.029, +0.064] |
+| XGBoost, (b) local + aggregated | GraphSAGE, (b) local + aggregated | Test before (35–42) | -0.245 [-0.380, -0.171] | -0.241 [-0.372, -0.122] |
+| XGBoost, (b) local + aggregated | GraphSAGE, (b) local + aggregated | Test after (43–49) | -0.001 [-0.019, +0.029] | +0.045 [-0.014, +0.129] |
+| XGBoost, (a) local | XGBoost, (a) + GNN embeddings (hybrid) | Test before (35–42) | -0.080 [-0.192, -0.026] | -0.031 [-0.056, -0.008] |
+| XGBoost, (a) local | XGBoost, (a) + GNN embeddings (hybrid) | Test after (43–49) | -0.003 [-0.014, +0.003] | +0.014 [-0.017, +0.055] |
+| XGBoost, (b) local + aggregated | XGBoost, (b) + GNN embeddings (hybrid) | Test before (35–42) | -0.142 [-0.261, -0.086] | -0.112 [-0.212, -0.025] |
+| XGBoost, (b) local + aggregated | XGBoost, (b) + GNN embeddings (hybrid) | Test after (43–49) | -0.004 [-0.019, +0.009] | +0.024 [-0.002, +0.057] |
+| GCN, (a) local | GraphSAGE, (a) local | Test before (35–42) | +0.152 [+0.090, +0.269] | +0.181 [+0.073, +0.337] |
+| GCN, (a) local | GraphSAGE, (a) local | Test after (43–49) | +0.002 [-0.009, +0.021] | +0.010 [-0.038, +0.052] |
+| GCN, (b) local + aggregated | GraphSAGE, (b) local + aggregated | Test before (35–42) | +0.044 [-0.005, +0.137] | +0.011 [-0.110, +0.121] |
+| GCN, (b) local + aggregated | GraphSAGE, (b) local + aggregated | Test after (43–49) | -0.009 [-0.035, +0.013] | +0.033 [-0.012, +0.095] |
+
+**6. SHAP** (TreeSHAP, log-odds scale)
+
+![Top features by mean |SHAP|](docs/figures/shap_top_features.png)
+
+![SHAP share by feature group](docs/figures/shap_groups.png)
+
+| Period | Local | Aggregated | Graph structure | Neighbour / community risk | Rank correlation of feature importance with training |
+|---|---|---|---|---|---|
+| Training (1–29) | 0.612 ± 0.003 | 0.300 ± 0.002 | 0.021 ± 0.002 | 0.067 ± 0.000 | – |
+| Validation (30–34) | 0.577 ± 0.005 | 0.317 ± 0.005 | 0.021 ± 0.002 | 0.085 ± 0.000 | 0.969 ± 0.003 |
+| Test before (35–42) | 0.560 ± 0.005 | 0.349 ± 0.006 | 0.021 ± 0.002 | 0.070 ± 0.000 | 0.963 ± 0.004 |
+| Test after (43–49) | 0.556 ± 0.005 | 0.359 ± 0.006 | 0.021 ± 0.002 | 0.064 ± 0.001 | 0.965 ± 0.003 |
+
+**7. False negatives** (illicit test transactions below the validation-tuned threshold)
+
+| Period | Illicit | Missed (per seed) | Share missed | Median score, missed | Median score, caught | Threshold |
+|---|---|---|---|---|---|---|
+| Test before (35–42) | 914 | 146 / 146 / 136 | 0.156 ± 0.006 | 0.013 ± 0.000 | 0.999 ± 0.000 | 0.775 ± 0.040 |
+| Test after (43–49) | 169 | 166 | 0.982 ± 0.000 | 0.002 ± 0.000 | 0.959 ± 0.013 | 0.775 ± 0.040 |
+| All test (35–49) | 1083 | 312 / 312 / 302 | 0.285 ± 0.005 | 0.004 ± 0.001 | 0.999 ± 0.000 | 0.775 ± 0.040 |
+
+Missed vs caught: graph context (medians) and mean signed SHAP per feature group (negative pushes towards licit)
+
+| Illicit test transactions | Count (per seed) | Median degree | Median neighbour risk, mean | Median neighbour risk, max | Mean SHAP: local | Mean SHAP: aggregated | Mean SHAP: graph structure | Mean SHAP: neighbour / community risk |
+|---|---|---|---|---|---|---|---|---|
+| Missed | 312 / 312 / 302 | 1.000 ± 0.000 | 0.002 ± 0.000 | 0.004 ± 0.000 | -3.064 ± 0.028 | -1.839 ± 0.056 | -0.007 ± 0.020 | -0.615 ± 0.030 |
+| Caught | 771 / 771 / 781 | 1.000 ± 0.000 | 0.089 ± 0.006 | 0.118 ± 0.000 | 4.921 ± 0.118 | 0.505 ± 0.034 | 0.054 ± 0.028 | 0.444 ± 0.012 |
+
+Largest feature differences, missed vs caught (standardised mean difference): `local_5` (+2.23), `local_14` (+2.23), `local_53` (+2.15), `local_55` (+2.01), `agg_21` (+1.90), `local_54` (+1.68), `agg_8` (+1.46), `agg_10` (+1.46), `agg_7` (+1.46), `agg_63` (+1.32).
+
+Of the 1083 illicit test transactions, 300 are missed by all three seeds and 764 by none; 19 depend on the seed.
+
+Would another model have caught XGBoost's misses? (each at its own validation threshold, seed matched to seed)
+
+| Other model | Period | XGBoost misses (per seed) | Of those, flagged by the other model (per seed) | Other model's own recall |
+|---|---|---|---|---|
+| GraphSAGE, (b) local + aggregated | Test before (35–42) | 146 / 146 / 136 | 16 / 16 / 14 | 0.681 ± 0.007 |
+| GraphSAGE, (b) local + aggregated | Test after (43–49) | 166 | 1 / 0 / 0 | 0.012 ± 0.000 |
+| XGBoost, (b) + GNN embeddings (hybrid) | Test before (35–42) | 146 / 146 / 136 | 17 / 14 / 14 | 0.669 ± 0.001 |
+| XGBoost, (b) + GNN embeddings (hybrid) | Test after (43–49) | 166 | 0 | 0.008 ± 0.003 |
+
+**8. Retraining simulation** ([D-035](docs/decisions.md); uses test-period labels, so not comparable with the results above)
+
+![Frozen vs retrained F1 per step](docs/figures/retrain.png)
+
+| Period | Model | Illicit | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| Test before (35–42) | Frozen | 914 | 0.915 ± 0.004 | 0.863 ± 0.002 | 0.888 ± 0.001 |
+| Test before (35–42) | Retrained | 914 | 0.951 ± 0.009 | 0.855 ± 0.001 | 0.901 ± 0.003 |
+| Test after (43–49) | Frozen | 169 | 0.038 ± 0.003 | 0.018 ± 0.000 | 0.024 ± 0.001 |
+| Test after (43–49) | Retrained | 169 | 0.538 ± 0.050 | 0.179 ± 0.019 | 0.268 ± 0.017 |
+
+<details><summary>Per step</summary>
+
+| Step | Illicit | F1 frozen | F1 retrained | PR-AUC frozen | PR-AUC retrained |
+|---|---|---|---|---|---|
+| 35 | 182 | 0.958 | 0.958 | 0.992 | 0.992 |
+| 36 | 33 | 0.842 | 0.861 | 0.988 | 0.993 |
+| 37 | 40 | 0.776 | 0.768 | 0.859 | 0.857 |
+| 38 | 111 | 0.931 | 0.939 | 0.951 | 0.952 |
+| 39 | 81 | 0.933 | 0.953 | 0.957 | 0.963 |
+| 40 | 112 | 0.759 | 0.780 | 0.764 | 0.768 |
+| 41 | 116 | 0.952 | 0.960 | 0.965 | 0.964 |
+| 42 | 239 | 0.843 | 0.864 | 0.885 | 0.895 |
+| 43 | 24 | 0.000 | 0.000 | 0.038 | 0.094 |
+| 44 | 24 | 0.037 | 0.062 | 0.031 | 0.072 |
+| 45 | 5 | 0.000 | 0.000 | 0.007 | 0.023 |
+| 46 | 2 | 0.144 | 0.429 | 0.118 | 0.512 |
+| 47 | 22 | 0.000 | 0.054 | 0.038 | 0.247 |
+| 48 | 36 | 0.000 | 0.279 | 0.160 | 0.561 |
+| 49 | 56 | 0.030 | 0.490 | 0.174 | 0.714 |
+
+</details>
+<!-- findings:end -->
+
+Reproduce with `uv run python scripts/run_analysis.py` (needs the Phase 2–4 runs and the
+graph feature table), then `uv run python scripts/make_results_table.py`.
