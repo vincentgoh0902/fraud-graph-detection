@@ -12,7 +12,18 @@ demo:
   output_dir: artifacts/space
   alerts_per_step: 20
   hops: 2
-  include_labels: false    # until the licence check before publishing
+  include_labels: false    # D-040: labels stay out of every public demo
+  # The published subset (D-042). The static site (D-044) and the Streamlit app both read
+  # this exact revision, so they serve the files the parity tests checked.
+  dataset_repo: vincentgoh-kaiswee/fraud-graph-detection-demo
+  dataset_revision: d87c8399deb7d66c575115f45edc201200614984
+
+# Static demo on GitHub Pages (Phase 7, D-043 to D-045).
+site:
+  output_dir: build/site
+  alerts_k: 100            # top-k alerts per step shipped; the page slices smaller k
+  shards_per_step: 16      # full SHAP for other transactions, fetched on demand
+  layout_seed: 0           # seeded spring layout for the neighbourhood SVGs
 
 # Query limits (D-040). The API refuses anything larger with 422.
 limits:
