@@ -588,3 +588,45 @@ checked by a test, so the demo runs the same versions as the tests.
 - `scripts/publish_demo_data.py` refuses to upload anything but the label-free demo export.
 **Cost.** The app downloads 5.5 MB on a cold start, and Community Cloud sleeps idle apps, so
 the first visit after a quiet spell is slow.
+
+## D-043: A static site on GitHub Pages is the main public demo
+**Context.** The Streamlit app on Community Cloud (D-042) sleeps when idle, and its cold
+start (install, download, load) takes minutes: a poor first impression for a link opened
+once on a phone.
+**Decision.** The main public demo is a static site on GitHub Pages: no backend, nothing to
+wake up. It shows the same views and numbers as the dashboard on the same demo subset. The
+Streamlit app stays deploy-ready as an optional second demo, and the full stack (Neo4j,
+FastAPI, dashboard) remains the local version.
+**Why not keep only Streamlit.** Pages is free, never sleeps and serves from a CDN; the demo
+is read-only over fixed data, which is exactly what a static site does well.
+
+## D-044: The site's data is fetched and converted at build time, by the serving code
+**Decision.** A GitHub Actions workflow downloads the pinned dataset revision (D-042),
+generates the site's JSON by calling `ServingService` (the dashboard's own code) and deploys
+it as a Pages artifact, so no data lands on any branch (D-012).
+**Why build time, not the browser.** The browser would have to parse Parquet. Hugging Face's
+file URLs redirect to a CDN, and relying on that redirect and its cross-origin headers at
+runtime would tie the site's uptime and rate limits to Hugging Face. Built once per deploy,
+the site has no outside dependency.
+**Why the serving code.** Ranking, truncation and SHAP selection are computed once, by the
+same code as the dashboard; the page only displays and slices. A parity test compares every
+generated file with fresh `ServingService` output.
+**Size.** SHAP for every transaction is 0.6-0.8 MB gzipped per step, so it is split: a small
+file per step (top-100 alerts with SHAP, neighbourhoods, communities), SHAP shards for the
+other transactions fetched on demand, and an ID-to-step lookup loaded only for a search.
+**Check.** Every JSON file is validated against an allow-list of keys; any label field, any
+feature column, or any edge outside the shipped subset fails the build.
+
+## D-045: Front end: plain HTML, CSS and ES modules; SVG drawn from build-time layouts
+**Decision.** No framework, no bundler, no runtime dependencies. Hash routes (`#/step/40`)
+and page-relative data URLs, so the site works under the Pages sub-path and later on a
+custom domain unchanged. Charts and the network are hand-written SVG in the dashboard's
+validated palette, with shapes, written values and tables so colour never carries meaning
+alone.
+**Why.** Five read-only views need no framework; leaving one out keeps the first load
+small and leaves nothing to keep updated. A force-directed graph library alone would
+outweigh the rest of the site, so node positions are computed at build time with a seeded
+NetworkX layout. Nodes, edges, colours, shapes and truncation match the dashboard; only the
+positions differ, because pyvis randomises its physics.
+**Smoke test.** Headless Chrome, preinstalled on GitHub's runners, loads the built site and
+checks the first screen rendered: no extra dependencies.

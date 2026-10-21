@@ -1,0 +1,76 @@
+# Static demo on GitHub Pages (Phase 7, D-043 to D-045).
+# Downloads the pinned demo subset, checks it, builds the site and deploys it as a Pages
+# artifact, so no data is ever committed to a branch (D-012, D-044).
+# One-time setup: Settings -> Pages -> Source: GitHub Actions.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push waits rather than cancelling one mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions pinned to exact commits; the comment names the release.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          enable-cache: true
+
+      # Serving and test dependencies only: no XGBoost, MLflow or torch (D-041).
+      - name: Install dependencies
+        run: uv sync --locked --no-default-groups --group dashboard --group dev
+
+      - name: Download the pinned demo subset
+        id: data
+        run: |
+          dir=$(uv run python -c '
+          from fraudgraph.config import load_config
+          from fraudgraph.serving.hub import download_demo
+          d = load_config("serving")["demo"]
+          print(download_demo(d["dataset_repo"], d["dataset_revision"]))')
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+      # Tests first: the leak check, conversion, number formatting, and parity of every
+      # generated file with the dashboard's serving layer on the real subset.
+      - name: Site tests (leak check and parity)
+        env:
+          SITE_DATA_DIR: ${{ steps.data.outputs.dir }}
+        run: >
+          uv run pytest tests/test_site_build.py tests/test_site_schema.py
+          tests/test_site_parity.py tests/test_site_format.py
+
+      - name: Build the site (runs the leak check again on the real output)
+        run: uv run python scripts/build_site.py --data "${{ steps.data.outputs.dir }}"
+
+      - name: Smoke test in headless Chrome
+        run: scripts/smoke_site.sh
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d  # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: build/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1

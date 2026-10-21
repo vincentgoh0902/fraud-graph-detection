@@ -1,5 +1,7 @@
 # fraud-graph-detection
 
+[![Live demo](https://img.shields.io/badge/live%20demo-GitHub%20Pages-1c5cab)](https://vincentgoh0902.github.io/fraud-graph-detection/)
+
 Detecting illicit Bitcoin transactions with graph machine learning, evaluated
 under a strict temporal split.
 
@@ -7,8 +9,8 @@ under a strict temporal split.
 improve illicit-transaction detection over tabular features alone, and does that
 improvement hold over time?
 
-> Status: Phase 6 (serving) done: [Findings](#findings-phase-5) and the
-> [investigator dashboard](#serving-phase-6) below. Every results table and figure in this
+> Status: Phase 7 done. [Live demo](https://vincentgoh0902.github.io/fraud-graph-detection/) (static, opens instantly);
+> [Findings](#findings-phase-5) and the [investigator dashboard](#serving-phase-6) below. Every results table and figure in this
 > README is generated from logged MLflow runs by `scripts/make_results_table.py`, not typed
 > by hand.
 
@@ -671,19 +673,49 @@ files for the demo and for CI. A test checks that both give identical answers on
 Memory in use after start-up, measured with `docker stats` on the Mac: Neo4j about 2.1 GB,
 API about 300 MB, dashboard about 50 MB. The public demo runs the dashboard with its data in-process and peaks at about 300 MB.
 
-**Live demo.** The dashboard runs on Streamlit Community Cloud, in-process on a subset: scores
-and SHAP values for steps 35–49, and payment edges only around each step's top 20 alerts. It
-has no features, no labels and no full edge list ([D-012](docs/decisions.md),
-[D-040](docs/decisions.md)). Paths and fan-in need the whole graph, so they are full-stack
-only. The subset lives in the public dataset repo
-[vincentgoh-kaiswee/fraud-graph-detection-demo](https://huggingface.co/datasets/vincentgoh-kaiswee/fraud-graph-detection-demo),
-with its licence and attribution ([D-042](docs/decisions.md)).
+**Live demo: [https://vincentgoh0902.github.io/fraud-graph-detection/](https://vincentgoh0902.github.io/fraud-graph-detection/)** ([Phase 7](#static-demo-phase-7)). A static site on GitHub Pages
+with the dashboard's views on a public subset: scores and SHAP values for steps 35–49, and
+payment edges only around each step's top 20 alerts. It has no features, no labels and no
+full edge list ([D-012](docs/decisions.md), [D-040](docs/decisions.md)). Paths and fan-in
+need the whole graph, so they are full-stack only.
 
-To redeploy: `uv run python scripts/publish_demo_data.py --repo <user>/<name>` uploads the
-subset and prints a commit hash. The Streamlit app (entrypoint `dashboard/app.py`, Python
-3.12) installs `dashboard/requirements.txt` and needs two secrets:
+*Optional second demo.* The same dashboard can run on Streamlit Community Cloud
+([D-042](docs/decisions.md)); it sleeps when idle, so it is not the main link. Entrypoint
+`dashboard/app.py`, Python 3.12, requirements `dashboard/requirements.txt`, and two secrets:
 
 ```toml
 DEMO_DATASET_REPO = "vincentgoh-kaiswee/fraud-graph-detection-demo"
-DEMO_DATASET_REVISION = "<commit hash printed by the publish script>"
+DEMO_DATASET_REVISION = "d87c8399deb7d66c575115f45edc201200614984"
+```
+
+## Static demo (Phase 7)
+
+[![The static demo: a flagged transaction's SHAP explanation and its 2-hop payment neighbourhood](docs/figures/static-demo.png)](https://vincentgoh0902.github.io/fraud-graph-detection/)
+
+**[https://vincentgoh0902.github.io/fraud-graph-detection/](https://vincentgoh0902.github.io/fraud-graph-detection/)**: the guided tour, the alert queue, transaction detail with SHAP and the
+payment neighbourhood, and communities. It works on a phone, needs no backend, and never
+sleeps ([D-043](docs/decisions.md)).
+
+**Same numbers as the dashboard.** The site's JSON is generated at build time by
+`ServingService`, the dashboard's own code ([D-044](docs/decisions.md)). A parity test compares
+every generated file with fresh service output: every alert list, neighbourhood and
+community, and all 67,504 transactions. The page formats numbers exactly as Python does,
+which a test checks against Python, including exact ties such as 0.625.
+
+**No data in git.** The `Pages` workflow (`.github/workflows/pages.yml`) downloads the pinned
+dataset revision from Hugging Face, runs the site tests (leak check, parity, formatting),
+builds the site, smoke-tests it in headless Chrome, and deploys it as a Pages artifact. The
+leak check fails the build on any label, any feature column, any unknown field or any edge
+outside the shipped subset.
+
+**Small.** Plain HTML, CSS and JavaScript modules with no framework and no runtime dependencies
+([D-045](docs/decisions.md)). The first screen loads 40 KB, 15 KB gzipped. A step's alert
+file is at most 15 KB gzipped, and a transaction's SHAP shard about 44 KB, fetched when opened.
+The neighbourhood graph is SVG with node positions computed at build time.
+
+```bash
+uv run python scripts/build_site.py                 # downloads the pinned revision
+uv run python scripts/build_site.py --data artifacts/space   # or a local demo export
+python -m http.server -d build/site 8000            # preview
+scripts/smoke_site.sh                               # headless Chrome check
 ```
