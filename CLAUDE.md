@@ -7,9 +7,11 @@ and does the improvement hold over time?
 - Spec: `PROJECT_BRIEF.md` (authoritative for scope, evaluation protocol, phases)
 - Design decisions and their justification: `docs/decisions.md`
 - Scope: Elliptic only. The IBM AML and Elliptic++ extensions are out of scope (D-007).
-- Visibility: public GitHub repo. Live demo: Streamlit Community Cloud running
-  `dashboard/app.py` in-process, data from the public HF dataset repo
-  `vincentgoh-kaiswee/fraud-graph-detection-demo` (D-042; no Neo4j). Full stack runs locally via docker compose.
+- Visibility: public GitHub repo. Live demo: static site on GitHub Pages
+  (https://vincentgoh0902.github.io/fraud-graph-detection/, D-043 to D-045), built by
+  `.github/workflows/pages.yml` from the public HF dataset repo
+  `vincentgoh-kaiswee/fraud-graph-detection-demo` at the revision pinned in
+  `configs/serving.yaml`. Optional: the Streamlit dashboard on Community Cloud (D-042). Full stack runs locally via docker compose.
   Not hosted publicly on the homelab (D-008).
 
 ## Stack
