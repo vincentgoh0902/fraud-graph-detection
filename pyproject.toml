@@ -43,6 +43,7 @@ api = [
     "uvicorn>=0.54.0",
 ]
 dashboard = [
+    "huggingface-hub>=2.2.0",
     "pyvis>=0.3.2",
     "requests>=2.34.2",
     "streamlit>=1.66.0",
