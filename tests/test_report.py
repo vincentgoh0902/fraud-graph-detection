@@ -128,3 +128,29 @@ def test_pair_interval_table_uses_given_labels():
          "share_positive": 0.1}  # fmt: skip
     out = pair_interval_table([("XGBoost, (b)", "GCN, (b)", r)], k=20)
     assert "| XGBoost, (b) | GCN, (b) | -0.020 [-0.050, +0.010] |" in out
+
+
+def test_results_tables_puts_each_lead_before_its_table():
+    out = results_tables(fake_runs(), k=20, leads=("How well it ranks.", "How it decides."))
+    assert out.startswith("How well it ranks.\n\n**Ranking quality**")
+    assert "How it decides.\n\n**Decisions at the validation-tuned threshold**" in out
+
+
+def test_headline_table_shows_each_model_against_the_reference():
+    from fraudgraph.evaluation.report import headline_table
+
+    rows = []
+    for model, fs, vals in [("xgboost", "all", [0.79, 0.79]), ("sage", "all", [0.5, 0.6])]:
+        for seed, v in enumerate(vals):
+            rows.append((model, fs, "g", "final", str(seed), v))
+    df = pd.DataFrame(
+        rows,
+        columns=["tags.model", "tags.feature_set", "tags.run_group", "tags.role", "tags.seed", "v"],
+    )
+    df["metrics.test_pr_auc"] = df["v"]
+    r = {"pr_auc_change": -0.24, "pr_auc_lo": -0.38, "pr_auc_hi": -0.17, "share_positive": 0.0}
+    labels = {("xgboost", "all"): "XGBoost (b)", ("sage", "all"): "GraphSAGE (b)"}
+    out = headline_table(df, ("xgboost", "all"), {("sage", "all"): r}, labels)
+    assert "| Model | Test PR-AUC | Change vs XGBoost (b) [95% interval] |" in out
+    assert "| XGBoost (b) | 0.790 ± 0.000 | – | – |" in out
+    assert "| GraphSAGE (b) | 0.550 ± 0.071 | -0.240 [-0.380, -0.170] | 0% |" in out

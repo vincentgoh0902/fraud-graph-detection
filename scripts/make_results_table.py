@@ -1,20 +1,26 @@
-"""Write the results tables into README.md from the logged MLflow runs.
+"""Write the results tables into README.md and docs/results.md from the logged MLflow runs.
 
 Usage:
     uv run python scripts/make_results_table.py
 
-Replaces the text between <!-- results:start --> and <!-- results:end --> (Phase 2) and
-between <!-- results-phase3:start --> and <!-- results-phase3:end --> (Phase 3), and
-between <!-- results-phase4:start --> and <!-- results-phase4:end --> (Phase 4, plus the
-figure docs/figures/per_step_f1.png). Every number comes from MLflow; nothing in those
-blocks is edited by hand. The Phase 3 and 4 blocks include a paired bootstrap over test
-steps, computed from each final run's logged test scores (D-024).
+Each block sits between <!-- name:start --> and <!-- name:end --> markers. Every number comes
+from MLflow; nothing in those blocks is edited by hand.
 
-Phase 5: between <!-- findings:start --> and <!-- findings:end -->, the tables and figures of
-the latest analysis run (scripts/run_analysis.py, D-033).
+README.md:
+    headline        the summary table: XGBoost (b) against the best graph-feature model,
+                    the best GNN and the hybrid, with paired-bootstrap intervals (D-024)
 
-Phase 6: between <!-- latency:start --> and <!-- latency:end -->, the latest latency run per
-graph backend (scripts/measure_latency.py).
+docs/results.md:
+    baselines       tabular models on (a) and (b)
+    graph-features  XGBoost on the Neo4j graph feature sets, with bootstrap intervals
+    gnn             GNNs and the hybrid, all models in one table, and the figure
+                    docs/figures/per_step_f1.png
+    findings        the tables and figures of the latest analysis run
+                    (scripts/run_analysis.py, D-033)
+    latency         the latest latency run per graph backend (scripts/measure_latency.py)
+
+Image links are written relative to the file they appear in. The blocks carry no decision IDs:
+the README and docs/results.md link to docs/decisions.md once instead (D-046).
 """
 
 import sys
@@ -42,6 +48,7 @@ from fraudgraph.evaluation.report import (
     all_models_table,
     checkpoint_table,
     comparison_table,
+    headline_table,
     interval_table,
     latest_finals,
     loss_table,
@@ -118,8 +125,34 @@ FIGURE_LABELS = {
 }
 
 
-def phase4_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict) -> str:
-    phase4 = finals[finals["tags.phase"] == "4"]
+def headline_block(finals: pd.DataFrame, k: int, cfg: dict) -> str:
+    """XGBoost (b) against the best of each graph approach on (b), the strongest base."""
+    reference = ("xgboost", "all")
+    challengers = [
+        ("xgboost", "all+graph"),
+        (best_gnn(finals, "all"), "all"),
+        ("xgboost", "all+emb"),
+    ]
+    intervals = bootstrap_pairs(finals, [(reference, c) for c in challengers], k, cfg)
+    seeds = {len(runs_for(finals, *key)) for key in [reference, *challengers]}
+    if len(seeds) != 1:
+        raise ValueError(f"Headline models have different seed counts: {seeds}")
+    return (
+        headline_table(
+            finals,
+            reference,
+            {c: intervals[(reference, c)] for c in challengers},
+            FIGURE_LABELS,
+        )
+        + f"\n\nTest steps 35–49, mean ± std over {seeds.pop()} seeds. Change: test PR-AUC "
+        "minus that of XGBoost (b), with a 95% interval from a paired bootstrap "
+        f"({cfg['n_bootstrap']} resamples of the 15 test steps, both models scored on the same "
+        "resample). Resamples where it wins: the share in which the model beats XGBoost (b)."
+    )
+
+
+def gnn_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict) -> str:
+    gnns = finals[finals["tags.phase"] == "4"]
     pairs = phase4_pairs(finals)
     intervals = bootstrap_pairs(finals, pairs, k, cfg)
     rows = [(model_label(*a), model_label(*b), intervals[(a, b)]) for a, b in pairs]
@@ -135,28 +168,42 @@ def phase4_block(finals: pd.DataFrame, gnn_runs: pd.DataFrame, k: int, cfg: dict
     per_step_f1_figure(series, REPO_ROOT / "docs" / "figures" / "per_step_f1.png")
 
     return (
-        results_tables(phase4, k)
-        + "\n\n**All models** (test steps 35–49; F1 at the max-F1 and the cost threshold, both "
+        results_tables(
+            gnns,
+            k,
+            leads=(
+                "How well GCN, GraphSAGE and the hybrid rank illicit transactions on the test "
+                "steps.",
+                "Their decisions at the thresholds tuned on validation.",
+            ),
+        )
+        + "\n\nEvery model and feature set of the project side by side.\n\n"
+        "**All models** (test steps 35–49; F1 at the max-F1 and the cost threshold, both "
         "tuned on validation)\n\n"
         + all_models_table(finals, k)
-        + "\n\n**Imbalance handling: weighted cross-entropy vs focal loss** (validation only; "
-        "best grid setting per loss, mean over seeds; [D-029](docs/decisions.md))\n\n"
+        + "\n\nThe loss function was part of each GNN's grid and was chosen on validation.\n\n"
+        "**Imbalance handling: weighted cross-entropy vs focal loss** (validation only; "
+        "best grid setting per loss, mean over seeds)\n\n"
         + loss_table(gnn_runs)
-        + "\n\n**Kept GNN checkpoints** (epoch per seed, and PR-AUC on training vs validation "
-        "nodes; [D-027](docs/decisions.md), [D-028](docs/decisions.md))\n\n"
+        + "\n\nThe checkpoint kept for each GNN, and how much better it scores on its own "
+        "training nodes than on validation.\n\n"
+        "**Kept GNN checkpoints** (epoch per seed, and PR-AUC on training vs validation "
+        "nodes)\n\n"
         + checkpoint_table(finals)
-        + f"\n\n**How sure is each change?** Paired bootstrap over test steps: "
-        f"{cfg['n_bootstrap']} resamples of the 15 test steps ([D-024](docs/decisions.md)). "
+        + "\n\nWhether the planned comparisons are larger than step-to-step noise.\n\n"
+        f"**How sure is each change?** Paired bootstrap over test steps: "
+        f"{cfg['n_bootstrap']} resamples of the 15 test steps. "
         f"Best GNN by validation PR-AUC: {chosen}.\n\n"
         + pair_interval_table(rows, k)
-        + "\n\n![Illicit F1 per test step](docs/figures/per_step_f1.png)"
+        + "\n\nIllicit F1 per test step for every model built on (b).\n\n"
+        "![Illicit F1 per test step](figures/per_step_f1.png)"
         + "\n\n<details><summary>The figure's numbers (illicit F1 per test step, mean over "
         "seeds)</summary>\n\n" + per_step_table(series) + "\n\n</details>"
     )
 
 
 def findings_block(k: int) -> str | None:
-    """The Phase 5 Findings tables and figures, from the latest analysis run."""
+    """The dark-market analysis tables and figures, from the latest analysis run."""
     cfg = load_config("analysis")
     setup_tracking(cfg["experiment"])
     runs = mlflow.search_runs(experiment_names=[cfg["experiment"]],
@@ -188,34 +235,42 @@ def findings_block(k: int) -> str | None:
     agree = t("errors/seed_agreement.csv")["n_illicit"]
     return (
         f"Analysis run `{run['tags.run_group']}`: XGBoost on "
-        f"{FEATURE_NAMES[run['tags.feature_set']]}, the model with the best validation PR-AUC "
-        "([D-033](docs/decisions.md)), refitted and "
-        "checked against its logged scores ([D-034](docs/decisions.md)). Mean ± std over 3 "
-        "seeds.\n\n"
+        f"{FEATURE_NAMES[run['tags.feature_set']]}, the model with the best validation PR-AUC, "
+        "refitted and checked against its logged scores. Mean ± std over 3 seeds.\n\n"
+        "Does the model still rank illicit transactions high after the shutdown, so that only "
+        "the threshold is off?\n\n"
         "**1. Ranking or threshold?** (labelled transactions; precision, recall and F1 at the "
         "validation-tuned threshold; recall@K and oracle F1 are per-step means; the oracle "
         "picks each step's best threshold from that step's own labels, a ceiling, not a result)"
         "\n\n"
         + findings.period_table(t("shift/period_metrics.csv"), k)
-        + "\n\n![Scores of illicit transactions](docs/figures/illicit_scores.png)"
-        "\n\n**2. Feature drift against the training period** (PSI per feature, all "
+        + "\n\n![Scores of illicit transactions](figures/illicit_scores.png)"
+        "\n\nHow far each feature's distribution moves away from the training period.\n\n"
+        "**2. Feature drift against the training period** (PSI per feature, all "
         "transactions)\n\n"
         + findings.drift_table(psi, cfg["drift"]["large_psi"])
-        + "\n\n**Hidden clocks**: features whose per-step median moves with the time step in the "
-        f"training period (|Spearman| ≥ {findings.CLOCK_RHO}; [D-036](docs/decisions.md))\n\n"
+        + "\n\nThe features that encode time itself, and how little the model relies on them."
+        "\n\n**Hidden clocks**: features whose per-step median moves with the time step in the "
+        f"training period (|Spearman| ≥ {findings.CLOCK_RHO})\n\n"
         + findings.clock_table(psi, shap_rank)
-        + "\n\n**3–4. Adversarial validation**: can a classifier tell two periods apart? (folds "
+        + "\n\nWhether a classifier can tell two periods apart, including two stretches of the "
+        "training period.\n\n"
+        "**3–4. Adversarial validation**: can a classifier tell two periods apart? (folds "
         "grouped by time step; the training early vs late row is a control added after the "
-        "first results, [D-036](docs/decisions.md))\n\n"
+        "first results)\n\n"
         + findings.adversarial_table(t("shift/adversarial.csv"))
-        + "\n\n**5. Do the planned comparisons hold in both periods?** (paired bootstrap over "
-        "the steps of each period, [D-024](docs/decisions.md))\n\n"
+        + "\n\nThe planned model comparisons, repeated before and after the shutdown.\n\n"
+        "**5. Do the planned comparisons hold in both periods?** (paired bootstrap over "
+        "the steps of each period)\n\n"
         + findings.period_bootstrap_table(t("shift/period_bootstrap.csv"), k)
-        + "\n\n**6. SHAP** (TreeSHAP, log-odds scale)\n\n"
-        "![Top features by mean |SHAP|](docs/figures/shap_top_features.png)\n\n"
-        "![SHAP share by feature group](docs/figures/shap_groups.png)\n\n"
+        + "\n\nWhich features the model relies on, and whether that changes over time.\n\n"
+        "**6. SHAP** (TreeSHAP, log-odds scale)\n\n"
+        "![Top features by mean |SHAP|](figures/shap_top_features.png)\n\n"
+        "![SHAP share by feature group](figures/shap_groups.png)\n\n"
         + findings.group_share_table(t("shap/group_shares.csv"), t("shap/rank_correlation.csv"))
-        + "\n\n**7. False negatives** (illicit test transactions below the validation-tuned "
+        + "\n\nThe illicit transactions the model misses, and how they differ from the ones it "
+        "catches.\n\n"
+        "**7. False negatives** (illicit test transactions below the validation-tuned "
         "threshold)\n\n"
         + findings.missed_table(t("errors/summary.csv"))
         + "\n\nMissed vs caught: graph context (medians) and mean signed SHAP per feature group "
@@ -228,9 +283,10 @@ def findings_block(k: int) -> str | None:
         "Would another model have caught XGBoost's misses? (each at its own validation threshold, "
         "seed matched to seed)\n\n"
         + findings.other_models_table(t("errors/other_models.csv"))
-        + "\n\n**8. Retraining simulation** ([D-035](docs/decisions.md); uses test-period labels, "
-        "so not comparable with the results above)\n\n"
-        "![Frozen vs retrained F1 per step](docs/figures/retrain.png)\n\n"
+        + "\n\nWhat retraining on each new step's labels would have recovered.\n\n"
+        "**8. Retraining simulation** (uses test-period labels, so not comparable with the "
+        "results above)\n\n"
+        "![Frozen vs retrained F1 per step](figures/retrain.png)\n\n"
         + findings.retrain_table(t("retrain/pooled.csv"))
         + "\n\n<details><summary>Per step</summary>\n\n"
         + findings.retrain_step_table(per_step)
@@ -272,8 +328,19 @@ def main() -> int:
         print("No runs logged yet; run scripts/run_experiment.py first.", file=sys.stderr)
         return 1
 
-    readme = REPO_ROOT / "README.md"
-    text = replace_between_markers(readme.read_text(), results_tables(base_runs, k), "results")
+    readme, results = REPO_ROOT / "README.md", REPO_ROOT / "docs" / "results.md"
+    readme_text = readme.read_text()
+    block = results_tables(
+        base_runs,
+        k,
+        leads=(
+            "How well each tabular model ranks illicit transactions above licit ones on the "
+            "test steps.",
+            "What its decisions look like once a threshold tuned on validation turns scores "
+            "into flags.",
+        ),
+    )
+    text = replace_between_markers(results.read_text(), block, "baselines")
 
     graph_runs = runs_of(graph_cfg["experiment"])
     if not graph_runs.empty:
@@ -282,16 +349,24 @@ def main() -> int:
             both[both["tags.model"] == "xgboost"], k, graph_cfg["comparison"]
         )
         block = (
-            results_tables(graph_runs, k)
-            + "\n\n**XGBoost: what each feature set adds** (test steps 35–49; change = "
+            results_tables(
+                graph_runs,
+                k,
+                leads=(
+                    "How well XGBoost ranks illicit transactions with each graph feature set.",
+                    "Its decisions at the thresholds tuned on validation.",
+                ),
+            )
+            + "\n\nWhat each feature set adds to XGBoost.\n\n"
+            "**XGBoost: what each feature set adds** (test steps 35–49; change = "
             "difference of seed means)\n\n"
             + comparison_table(both, "xgboost", k)
-            + "\n\n**How sure is each change?** Paired bootstrap over test steps: "
+            + "\n\nWhether each change is larger than step-to-step noise.\n\n"
+            "**How sure is each change?** Paired bootstrap over test steps: "
             f"{graph_cfg['comparison']['n_bootstrap']} resamples of the 15 test steps, both "
-            "feature sets scored on the same resample ([D-024](docs/decisions.md)).\n\n"
-            + interval_table(intervals, k)
+            "feature sets scored on the same resample.\n\n" + interval_table(intervals, k)
         )
-        text = replace_between_markers(text, block, "results-phase3")
+        text = replace_between_markers(text, block, "graph-features")
         print(block)
 
     gnn_runs = runs_of(load_experiment_config("gnn")["experiment"])
@@ -301,8 +376,11 @@ def main() -> int:
             [latest_finals(r) for r in (base_runs, graph_runs, gnn_runs, hybrid_runs)
              if not r.empty]
         )  # fmt: skip
-        block = phase4_block(everything, gnn_runs, k, graph_cfg["comparison"])
-        text = replace_between_markers(text, block, "results-phase4")
+        block = gnn_block(everything, gnn_runs, k, graph_cfg["comparison"])
+        text = replace_between_markers(text, block, "gnn")
+        print(block)
+        block = headline_block(everything, k, graph_cfg["comparison"])
+        readme_text = replace_between_markers(readme_text, block, "headline")
         print(block)
     block = findings_block(k)
     if block is not None:
@@ -312,7 +390,8 @@ def main() -> int:
     if block is not None:
         text = replace_between_markers(text, block, "latency")
         print(block)
-    readme.write_text(text)
+    results.write_text(text)
+    readme.write_text(readme_text)
     return 0
 
 

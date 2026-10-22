@@ -85,8 +85,10 @@ def _table(
     return "\n".join(lines)
 
 
-def results_tables(runs: pd.DataFrame, k: int) -> str:
+def results_tables(runs: pd.DataFrame, k: int, leads: tuple[str, str] = ("", "")) -> str:
+    """Ranking and decision tables; each lead sentence, if given, goes before its table."""
     finals = latest_finals(runs)
+    ranking_lead, decision_lead = (f"{lead}\n\n" if lead else "" for lead in leads)
     ranking = {
         "val_pr_auc": "Val PR-AUC",
         "test_pr_auc": "Test PR-AUC",
@@ -102,9 +104,12 @@ def results_tables(runs: pd.DataFrame, k: int) -> str:
         "test_cost_f1": "F1 (cost)",
     }
     return (
-        "**Ranking quality** (test steps 35–49; precision/recall@K are per-step means)\n\n"
+        ranking_lead
+        + "**Ranking quality** (test steps 35–49; precision/recall@K are per-step means)\n\n"
         + _table(finals, ranking)
-        + "\n\n**Decisions at the validation-tuned threshold** (left: max-F1 threshold; "
+        + "\n\n"
+        + decision_lead
+        + "**Decisions at the validation-tuned threshold** (left: max-F1 threshold; "
         "right: cost threshold, a miss costs 10× a false alarm)\n\n"
         + _table(finals, decisions)
         + "\n\nMean ± sample standard deviation over seeds."
@@ -150,6 +155,12 @@ def comparison_table(finals: pd.DataFrame, model: str, k: int) -> str:
 
 def signed(v: float) -> str:
     return f"{round(v, 3) + 0.0:+.3f}"  # + 0.0 turns -0.0 into 0.0
+
+
+def _interval(r: dict[str, float], metric: str) -> str:
+    """'change [lo, hi]' for one metric of a bootstrap result."""
+    change, lo, hi = (signed(r[f"{metric}_{part}"]) for part in ("change", "lo", "hi"))
+    return f"{change} [{lo}, {hi}]"
 
 
 def interval_table(intervals: dict[tuple[str, str], dict[str, float]], k: int) -> str:
@@ -238,11 +249,36 @@ def pair_interval_table(rows: list[tuple[str, str, dict[str, float]]], k: int) -
         cells = [
             src,
             dst,
-            f"{signed(r['pr_auc_change'])} [{signed(r['pr_auc_lo'])}, {signed(r['pr_auc_hi'])}]",
-            f"{signed(r['precision_at_k_change'])} "
-            f"[{signed(r['precision_at_k_lo'])}, {signed(r['precision_at_k_hi'])}]",
+            _interval(r, "pr_auc"),
+            _interval(r, "precision_at_k"),
             f"{r['share_positive']:.0%}",
         ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def headline_table(
+    finals: pd.DataFrame,
+    reference: tuple[str, str],
+    intervals: dict[tuple[str, str], dict[str, float]],
+    labels: dict[tuple[str, str], str],
+) -> str:
+    """The README's summary: test PR-AUC of the reference and of each challenger, with the
+    paired-bootstrap change against the reference. Rows follow the order of `intervals`."""
+    header = ["Model", "Test PR-AUC", f"Change vs {labels[reference]} [95% interval]",
+              "Resamples where it wins"]  # fmt: skip
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    for key in [reference, *intervals]:
+        model, fs = key
+        g = finals[(finals["tags.model"] == model) & (finals["tags.feature_set"] == fs)]
+        cells = [labels[key], mean_std(g["metrics.test_pr_auc"])]
+        if key == reference:
+            cells += ["–", "–"]
+        else:
+            cells += [
+                _interval(intervals[key], "pr_auc"),
+                f"{intervals[key]['share_positive']:.0%}",
+            ]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
