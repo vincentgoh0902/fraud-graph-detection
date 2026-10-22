@@ -4,7 +4,7 @@ Graph-based illicit-transaction detection on the Elliptic Bitcoin dataset.
 Research question: does graph structure improve detection over tabular features,
 and does the improvement hold over time?
 
-- Spec: `PROJECT_BRIEF.md` (authoritative for scope, evaluation protocol, phases)
+- Spec: `docs/PROJECT_BRIEF.md` (authoritative for scope, evaluation protocol, phases)
 - Design decisions and their justification: `docs/decisions.md`
 - Scope: Elliptic only. The IBM AML and Elliptic++ extensions are out of scope (D-007).
 - Visibility: public GitHub repo. Live demo: static site on GitHub Pages

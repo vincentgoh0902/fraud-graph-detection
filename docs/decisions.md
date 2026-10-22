@@ -630,3 +630,18 @@ NetworkX layout. Nodes, edges, colours, shapes and truncation match the dashboar
 positions differ, because pyvis randomises its physics.
 **Smoke test.** Headless Chrome, preinstalled on GitHub's runners, loads the built site and
 checks the first screen rendered: no extra dependencies.
+
+## D-046: README as a project page; full tables in docs/results.md
+**Context.** The README had grown phase by phase into an audit trail: "Phase N" headings,
+around 30 inline decision IDs, and every results table, so the findings sat several screens
+down. Its main readers are recruiters and hiring managers, who skim the first screen.
+**Decision.** The README is organised by topic (In short, Results, How it was evaluated,
+Why graphs didn't help, The dark-market collapse, Demo, Serving, Reproduce, Project
+structure, Data and licence). It keeps one generated headline table (XGBoost (b) against
+the best graph-feature model, the best GNN and the hybrid, with the paired-bootstrap
+intervals of D-024) and three figures. Every other table moves to `docs/results.md`, still
+written by `scripts/make_results_table.py`, with a lead sentence per table. Neither file
+cites decision IDs inline; each links to this file once. `PROJECT_BRIEF.md` moves to `docs/`.
+**What did not change.** No number, run or analysis. A one-off check compared every number
+in the old README with the new README plus `docs/results.md`. Older entries that mention
+"README tables" or "README Findings" now refer to the matching sections of `docs/results.md`.

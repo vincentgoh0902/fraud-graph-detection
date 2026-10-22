@@ -57,7 +57,7 @@ const inRange = (meta, t) => Math.min(Math.max(t, meta.steps[0]), meta.steps[1])
 function neo4jNote() {
   return h("p", { class: "note" },
     "This demo runs on prebuilt files, without a database. The full stack (",
-    link(`${REPO}#serving-phase-6`, "docker compose up"),
+    link(`${REPO}#serving`, "docker compose up"),
     ") runs the same queries in Neo4j with Cypher through a FastAPI service, including paths and fan-in across the whole graph.");
 }
 
