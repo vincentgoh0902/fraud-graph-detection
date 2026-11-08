@@ -1,6 +1,7 @@
 # fraud-graph-detection
 
 [![Live demo](https://img.shields.io/badge/live%20demo-GitHub%20Pages-1c5cab)](https://vincentgoh0902.github.io/fraud-graph-detection/)
+&nbsp;**[Open the live demo](https://vincentgoh0902.github.io/fraud-graph-detection/)**: static, opens instantly, works on a phone.
 
 An end-to-end classifier that flags illicit Bitcoin transactions for an investigator's alert queue. It scores every transaction, ranks the 20 riskiest per time step, and explains each alert with SHAP and its payment neighbourhood. Built on the Elliptic dataset (~200K transactions, ~2% of them labelled illicit) and evaluated under a strict temporal split.
 
@@ -14,11 +15,11 @@ An end-to-end classifier that flags illicit Bitcoin transactions for an investig
 
 ## What I found
 
-- **Graph neural networks didn't beat XGBoost.** The best GNN (GraphSAGE) reached test PR-AUC 0.58, and engineered graph features added nothing measurable on top of the dataset's own features.
+- **Graph neural networks didn't beat XGBoost.** The best GNN (GraphSAGE on local features) reached test PR-AUC 0.58, and engineered graph features added nothing measurable on top of the dataset's own features.
 - **Every model collapsed after a dark-market shutdown at step 43** (F1 0.89 before, 0.03 after). SHAP and adversarial validation show it was a ranking failure: new illicit transactions looked licit in their own features *and* their neighbourhoods.
 - **Retraining on new labels is the fix, not a different model.** Retraining each step lifts F1 after the shutdown from 0.02 to 0.27, once labels for the new pattern exist.
 
-The research question behind the project: *does graph structure improve illicit-transaction detection over tabular features alone, and does the improvement hold over time?* Every table in this README is generated from logged MLflow runs, not typed by hand; design decisions are in [`docs/decisions.md`](docs/decisions.md).
+The research question behind the project: *does graph structure improve illicit-transaction detection over tabular features alone, and does the improvement hold over time?* Design decisions and their justification are in [`docs/decisions.md`](docs/decisions.md).
 
 ## Results
 
