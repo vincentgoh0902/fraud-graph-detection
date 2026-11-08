@@ -1,24 +1,25 @@
 # fraud-graph-detection
 
-Detecting illicit Bitcoin transactions with graph machine learning, evaluated under a strict
-temporal split. Does graph structure help, and does the answer hold over time?
-
 [![Live demo](https://img.shields.io/badge/live%20demo-GitHub%20Pages-1c5cab)](https://vincentgoh0902.github.io/fraud-graph-detection/)
 &nbsp;**[Open the live demo](https://vincentgoh0902.github.io/fraud-graph-detection/)**: static, opens instantly, works on a phone.
 
-<a href="https://vincentgoh0902.github.io/fraud-graph-detection/"><img src="docs/figures/static-demo.png" width="380" align="right" alt="The static demo: a flagged transaction's SHAP explanation and its 2-hop payment neighbourhood"></a>
+An end-to-end classifier that flags illicit Bitcoin transactions for an investigator's alert queue. It scores every transaction, ranks the 20 riskiest per time step, and explains each alert with SHAP and its payment neighbourhood. Built on the Elliptic dataset (~200K transactions, ~2% of them labelled illicit) and evaluated under a strict temporal split.
 
-## In short
+![Investigator dashboard](docs/figures/static-demo.png)
 
-- **Graph structure did not help.** XGBoost on the dataset's own features matched or beat
-  engineered Neo4j graph features, GCN, GraphSAGE and a GNN-embedding hybrid.
-- **Every model collapses after the dark-market shutdown at step 43.** The analysis shows
-  why: the new illicit transactions look licit in their own features *and* in their
-  neighbourhoods, so no model, graph-based or not, ranks them as risky.
-- **Input-drift alarms could not have flagged it.** Six anonymised features act as hidden
-  clocks, so any two periods look different, even two stretches of the training data.
-- **What helps is retraining on new labels, not a different model**, and only once labels
-  from the new pattern exist.
+## Results at a glance
+
+- **Model:** XGBoost on the dataset's features plus Neo4j graph features, test PR-AUC **0.795**.
+- **Decisions:** at a cost threshold where a missed case costs 10× a false alarm, precision **0.71** and recall **0.74**.
+- **Serving:** FastAPI over Neo4j, a Streamlit dashboard, and a static public demo; p95 API latency under 25 ms.
+
+## What I found
+
+- **Graph neural networks didn't beat XGBoost.** The best GNN (GraphSAGE on local features) reached test PR-AUC 0.58, and engineered graph features added nothing measurable on top of the dataset's own features.
+- **Every model collapsed after a dark-market shutdown at step 43** (F1 0.89 before, 0.03 after). SHAP and adversarial validation show it was a ranking failure: new illicit transactions looked licit in their own features *and* their neighbourhoods.
+- **Retraining on new labels is the fix, not a different model.** Retraining each step lifts F1 after the shutdown from 0.02 to 0.27, once labels for the new pattern exist.
+
+The research question behind the project: *does graph structure improve illicit-transaction detection over tabular features alone, and does the improvement hold over time?* Design decisions and their justification are in [`docs/decisions.md`](docs/decisions.md).
 
 ## Results
 
